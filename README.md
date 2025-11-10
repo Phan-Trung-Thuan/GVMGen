@@ -61,7 +61,7 @@ python load_model.py --checkpoint_path path/to/your_checkpoint --output_path pat
 * inference
 
 ```
-python test.py --model_path ./checkpoints/state_dict.bin --video_path test.mp4 --syn_path output --fps 1 --duration 30
+python test.py --model_path ./checkpoints --video_path test.mp4 --syn_path output --fps 1 --duration 30
 ```
 
 ### 6. Evaluation Model
