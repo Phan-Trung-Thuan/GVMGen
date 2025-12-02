@@ -206,7 +206,7 @@ threadpoolctl
 timm
 tokenizers
 toolz
-torch==2.0.0
+
 torchaudio==2.0.1
 torchlibrosa==0.1.0
 torchmetrics==1.2.0
