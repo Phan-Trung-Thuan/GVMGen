@@ -11,7 +11,7 @@ async-timeout
 attrs
 audiocraft==1.1.0
 audioread
-av==11.0.0
+
 blis
 braceexpand
 cachetools
