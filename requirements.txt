@@ -230,7 +230,7 @@ websockets
 Werkzeug
 wget==3.2
 wheel==0.41.2
-xformers==0.0.19
+xformers==0.0.20
 xxhash
 yarl==1.9.3
 zipp==3.17.0
