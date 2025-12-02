@@ -206,11 +206,11 @@ threadpoolctl
 timm
 tokenizers
 toolz
-torch==2.0.0
-torchaudio==2.0.0
+torch==2.0.1
+torchaudio==2.0.2
 torchlibrosa==0.1.0
 torchmetrics==1.2.0
-torchvision==0.15.1
+torchvision==0.15.2
 tqdm==4.66.1
 transformers==4.35.1
 treetable
