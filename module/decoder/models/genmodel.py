@@ -271,5 +271,6 @@ class BaseGenModel(ABC):
         """Generate Audio from tokens."""
         assert gen_tokens.dim() == 3
         with torch.no_grad():
+            gen_tokens = gen_tokens.to('cuda:1')
             gen_audio = self.compression_model.decode(gen_tokens, None)
         return gen_audio
