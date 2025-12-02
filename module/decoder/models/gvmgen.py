@@ -273,7 +273,8 @@ class GVMGen(BaseGenModel):
                         [self.sample_rate] * ref_wav[0].size(0),
                         [None], [0.])
                 with self.autocast:
-                    prompt_tokens = prompt_tokens.to('cuda:0')
+                    if isinstance(prompt_tokens, torch.Tensor):
+                        prompt_tokens = prompt_tokens.to('cuda:0')
                     gen_tokens = self.lm.generate(
                         prompt_tokens, attributes,
                         callback=callback, max_gen_len=max_gen_len, **self.generation_params)
