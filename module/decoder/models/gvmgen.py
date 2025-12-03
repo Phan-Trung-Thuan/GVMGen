@@ -68,9 +68,7 @@ def convert_to_linear4bit(model, device):
                 in_f,
                 out_f,
                 bias=bias,
-            ).to(device)
-            print(module)
-            print(new_linear)
+            )
             
             # copy weight/bias từ Linear cũ
             new_linear.load_state_dict(module.state_dict())
