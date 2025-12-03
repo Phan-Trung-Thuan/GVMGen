@@ -29,7 +29,7 @@ MelodyType = tp.Union[torch.Tensor, MelodyList]
 
 import bitsandbytes as bnb
 
-def convert_to_linear8bit(model):
+def convert_to_linear8bit(model, device):
     for name, module in model.named_children():
         # Nếu gặp Linear → thay bằng Linear8bitLt
         if isinstance(module, torch.nn.Linear):
@@ -42,17 +42,14 @@ def convert_to_linear8bit(model):
                 out_f,
                 bias=bias,
             )
-
+            
             # copy weight/bias từ Linear cũ
-            new_linear.weight.data = module.weight.data.clone()
-            if bias:
-                new_linear.bias.data = module.bias.data.clone()
-
-            setattr(model, name, new_linear)
+            new_linear.load_state_dict(module.state_dict())
+            new_linear = new_linear.to(device)
 
         else:
             # Đệ quy để đi sâu vào model
-            convert_to_linear8bit(module)
+            convert_to_linear8bit(module, device)
 
     return model
 
@@ -107,7 +104,7 @@ class GVMGen(BaseGenModel):
             else:
                 device = 'cpu'
 
-        lm = convert_to_linear4bit(load_lm_model(name, device='cuda:0'), 'cuda:0')
+        lm = convert_to_linear8bit(load_lm_model(name, device='cuda:0'), 'cuda:0')
         compression_model = load_compression_model(name, device='cuda:1')
         if 'self_wav' in lm.condition_provider.conditioners:
             lm.condition_provider.conditioners['self_wav'].match_len_on_eval = True
