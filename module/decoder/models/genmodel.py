@@ -164,9 +164,12 @@ class BaseGenModel(ABC):
             descriptions (list of str): A list of strings used as text/video conditioning.
             progress (bool, optional): Flag to display progress of the generation process. Defaults to False.
         """
+        print('_prepare_tokens_and_attributes')
         attributes, prompt_tokens = self._prepare_tokens_and_attributes(descriptions, None)
         assert prompt_tokens is None
+        print('_generate_tokens')
         tokens = self._generate_tokens(attributes, prompt_tokens, progress)
+        print('generate_audio')
         if return_tokens:
             return self.generate_audio(tokens), tokens
         return self.generate_audio(tokens)
