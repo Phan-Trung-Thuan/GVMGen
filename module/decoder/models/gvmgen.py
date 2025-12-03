@@ -82,7 +82,6 @@ class GVMGen(BaseGenModel):
                 device = 'cpu'
 
         lm = convert_to_linear8bit(load_lm_model(name, device='cuda:0'))
-        print(lm)
         compression_model = load_compression_model(name, device='cuda:1')
         print(compression_model)
         if 'self_wav' in lm.condition_provider.conditioners:
