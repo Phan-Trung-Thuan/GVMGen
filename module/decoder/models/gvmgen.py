@@ -27,7 +27,34 @@ from ..modules.conditioners import ConditioningAttributes, WavCondition
 MelodyList = tp.List[tp.Optional[torch.Tensor]]
 MelodyType = tp.Union[torch.Tensor, MelodyList]
 
+import bitsandbytes as bnb
 
+def convert_to_linear8bit(model):
+    for name, module in model.named_children():
+        # Nếu gặp Linear → thay bằng Linear8bitLt
+        if isinstance(module, torch.nn.Linear):
+            in_f = module.in_features
+            out_f = module.out_features
+            bias = module.bias is not None
+
+            new_linear = bnb.nn.Linear8bitLt(
+                in_f,
+                out_f,
+                bias=bias,
+            )
+
+            # copy weight/bias từ Linear cũ
+            new_linear.weight.data = module.weight.data.clone()
+            if bias:
+                new_linear.bias.data = module.bias.data.clone()
+
+            setattr(model, name, new_linear)
+
+        else:
+            # Đệ quy để đi sâu vào model
+            convert_to_linear8bit(module)
+
+    return model
 
 class GVMGen(BaseGenModel):
     """GVMGen main model with convenient generation API.
@@ -54,9 +81,10 @@ class GVMGen(BaseGenModel):
             else:
                 device = 'cpu'
 
-        lm = load_lm_model(name, device='cuda:0')
+        lm = convert_to_linear8bit(load_lm_model(name, device='cuda:0'))
         print(lm)
         compression_model = load_compression_model(name, device='cuda:1')
+        print(compression_model)
         if 'self_wav' in lm.condition_provider.conditioners:
             lm.condition_provider.conditioners['self_wav'].match_len_on_eval = True
             lm.condition_provider.conditioners['self_wav']._use_masking = False

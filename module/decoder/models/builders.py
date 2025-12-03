@@ -105,7 +105,7 @@ def get_lm_model(cfg: omegaconf.DictConfig) -> LMModel:
             )
 
         pattern_provider = get_codebooks_pattern_provider(n_q, codebooks_pattern_cfg)
-        lm_class = LMModel
+        lm_class = LMModel        
         return lm_class(
             pattern_provider=pattern_provider,
             condition_provider=condition_provider,
