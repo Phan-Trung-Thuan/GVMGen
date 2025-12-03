@@ -79,7 +79,7 @@ def convert_to_linear4bit(model, device):
 
         else:
             # Đệ quy để đi sâu vào model
-            convert_to_linear4bit(module)
+            convert_to_linear4bit(module, device)
 
     return model
 
@@ -108,7 +108,7 @@ class GVMGen(BaseGenModel):
             else:
                 device = 'cpu'
 
-        lm = convert_to_linear4bit(load_lm_model(name, device='cuda:0'), device='cuda:0')
+        lm = convert_to_linear4bit(load_lm_model(name, device='cuda:0'), 'cuda:0')
         # print(lm)
         compression_model = load_compression_model(name, device='cuda:1')
         if 'self_wav' in lm.condition_provider.conditioners:
