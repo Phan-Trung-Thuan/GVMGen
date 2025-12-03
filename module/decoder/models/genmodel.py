@@ -252,6 +252,7 @@ class BaseGenModel(ABC):
 
             stride_tokens = int(self.frame_rate * self.extend_stride)
             while current_gen_offset + prompt_length < total_gen_len:
+                print(current_gen_offset + prompt_length, total_gen_len)
                 time_offset = current_gen_offset / self.frame_rate
                 chunk_duration = min(self.duration - time_offset, self.max_duration)
                 max_gen_len = int(chunk_duration * self.frame_rate)
