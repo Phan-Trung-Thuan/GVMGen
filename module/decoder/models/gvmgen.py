@@ -58,6 +58,7 @@ def convert_to_linear8bit(model):
 
 def convert_to_linear4bit(model, device):
     for name, module in model.named_children():
+        # Nếu gặp Linear → thay bằng Linear8bitLt
         if isinstance(module, torch.nn.Linear):
             in_f = module.in_features
             out_f = module.out_features
@@ -69,25 +70,10 @@ def convert_to_linear4bit(model, device):
                 bias=bias,
             ).to(device)
 
-            # Sao chép weight/bias từ Linear cũ
+            # copy weight/bias từ Linear cũ
             new_linear.weight.data = module.weight.data.clone()
             if bias:
                 new_linear.bias.data = module.bias.data.clone()
-            
-            # === BƯỚC QUAN TRỌNG: Thiết lập trạng thái lượng tử ===
-            # Đặt trọng số đã sao chép vào GPU và cho bnb xử lý để tạo quant_state
-            # Điều này buộc BitsAndBytes phải thực hiện lượng tử hóa thực sự
-            # và thiết lập các tham số giải lượng tử (quant_state).
-            new_linear = bnb.utils.replace_with_bnb_layers(
-                new_linear, module.weight.data.dtype, new_linear.compute_dtype
-            ) 
-            # Tuy nhiên, cách đơn giản hơn là cố gắng gọi hàm xử lý của bnb
-
-            # Thử cách đơn giản nhất:
-            if not hasattr(new_linear.weight, 'quant_state'):
-                 # Bắt buộc bnb phải tính toán và lưu trữ quant_state
-                 # Dùng trọng số float32 để khởi tạo bnb.nn.Params4bit
-                 bnb.functional.dequantize_4bit(new_linear.weight.data, new_linear.weight.quant_state)
 
             setattr(model, name, new_linear)
 
