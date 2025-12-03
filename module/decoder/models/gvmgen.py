@@ -56,6 +56,33 @@ def convert_to_linear8bit(model):
 
     return model
 
+def convert_to_linear4bit(model):
+    for name, module in model.named_children():
+        # Nếu gặp Linear → thay bằng Linear8bitLt
+        if isinstance(module, torch.nn.Linear):
+            in_f = module.in_features
+            out_f = module.out_features
+            bias = module.bias is not None
+
+            new_linear = bnb.nn.Linear4bit(
+                in_f,
+                out_f,
+                bias=bias,
+            )
+
+            # copy weight/bias từ Linear cũ
+            new_linear.weight.data = module.weight.data.clone()
+            if bias:
+                new_linear.bias.data = module.bias.data.clone()
+
+            setattr(model, name, new_linear)
+
+        else:
+            # Đệ quy để đi sâu vào model
+            convert_to_linear4bit(module)
+
+    return model
+
 class GVMGen(BaseGenModel):
     """GVMGen main model with convenient generation API.
 
@@ -81,7 +108,7 @@ class GVMGen(BaseGenModel):
             else:
                 device = 'cpu'
 
-        lm = convert_to_linear8bit(load_lm_model(name, device='cuda:0'))
+        lm = convert_to_linear4bit(load_lm_model(name, device='cuda:0'))
         print(lm)
         compression_model = load_compression_model(name, device='cuda:1')
         if 'self_wav' in lm.condition_provider.conditioners:
