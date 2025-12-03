@@ -31,32 +31,30 @@ def main():
     model.set_generation_params(duration=mp4_pt.shape[0])
 
     description = [mp4_pt]
-    while True:
-        continue
 
-    # res = model.generate(descriptions = description)
+    res = model.generate(descriptions = description)
 
-    # for idx, one_wav in enumerate(res):
-    #     # Will save under {idx}.wav, with loudness normalization at -14 db LUFS.
-    #     audio_write(f'{idx}', one_wav.cpu(), model.sample_rate, strategy="loudness", loudness_compressor=True)
-    #     video_mp = mp.VideoFileClip(str(args.video_path))
-    #     audio_clip = AudioSegment.from_wav(str(idx)+'.wav')
-    #     audio_clip[0:int(video_mp.duration*1000)].export(str(idx)+'.wav')
-    #     # Render generated music into input video
-    #     audio_mp = mp.AudioFileClip(str(str(idx)+'.wav'))
+    for idx, one_wav in enumerate(res):
+        # Will save under {idx}.wav, with loudness normalization at -14 db LUFS.
+        audio_write(f'{idx}', one_wav.cpu(), model.sample_rate, strategy="loudness", loudness_compressor=True)
+        video_mp = mp.VideoFileClip(str(args.video_path))
+        audio_clip = AudioSegment.from_wav(str(idx)+'.wav')
+        audio_clip[0:int(video_mp.duration*1000)].export(str(idx)+'.wav')
+        # Render generated music into input video
+        audio_mp = mp.AudioFileClip(str(str(idx)+'.wav'))
 
-    #     audio_mp = audio_mp.subclip(0, video_mp.duration )
-    #     final = video_mp.set_audio(audio_mp)
-    #     try:
-    #         final.write_videofile(os.path.join(args.syn_path, str(idx)+'.mp4'),
-    #             codec='libx264', 
-    #             audio_codec='aac', 
-    #             temp_audiofile='temp-audio.m4a',
-    #             remove_temp=True
-    #         )
-    #     except Exception as e:
-    #         print(f"error：{e}")
-    #     os.remove(str(idx)+'.wav')
+        audio_mp = audio_mp.subclip(0, video_mp.duration )
+        final = video_mp.set_audio(audio_mp)
+        try:
+            final.write_videofile(os.path.join(args.syn_path, str(idx)+'.mp4'),
+                codec='libx264', 
+                audio_codec='aac', 
+                temp_audiofile='temp-audio.m4a',
+                remove_temp=True
+            )
+        except Exception as e:
+            print(f"error：{e}")
+        os.remove(str(idx)+'.wav')
 
 if __name__ == '__main__':
     main()
