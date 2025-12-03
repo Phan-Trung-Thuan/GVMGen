@@ -9,6 +9,8 @@ from functools import partial
 import logging
 import math
 import typing as tp
+import gc
+from tqdm import tqdm
 
 import torch
 from torch import nn
@@ -487,6 +489,11 @@ class LMModel(StreamingModule):
         gen_codes[..., :start_offset] = prompt
         # create the gen_sequence with proper interleaving from the pattern: [B, K, S]
         gen_sequence, indexes, mask = pattern.build_pattern_sequence(gen_codes, self.special_token_id)
+        del gen_codes
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
+
         # retrieve the start_offset in the sequence:
         # it is the first sequence step that contains the `start_offset` timestep
         start_offset_sequence = pattern.get_first_step_with_timesteps(start_offset)
@@ -496,7 +503,7 @@ class LMModel(StreamingModule):
             unconditional_state = self.get_streaming_state()
             prev_offset = 0
             gen_sequence_len = gen_sequence.shape[-1]  # gen_sequence shape is [B, K, S]
-            for offset in range(start_offset_sequence, gen_sequence_len):
+            for offset in tqdm(range(start_offset_sequence, gen_sequence_len)):
                 # get current sequence (note that the streaming API is providing the caching over previous offsets)
                 curr_sequence = gen_sequence[..., prev_offset:offset]
                 curr_mask = mask[None, ..., prev_offset:offset].expand(B, -1, -1)
@@ -509,6 +516,12 @@ class LMModel(StreamingModule):
                 next_token = self._sample_next_token(
                     curr_sequence, cfg_conditions, unconditional_state, use_sampling, temp, top_k, top_p,
                     cfg_coef=cfg_coef, two_step_cfg=two_step_cfg)
+                
+                del curr_sequence
+                gc.collect()
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+
                 # ensure the tokens that should be masked are properly set to special_token_id
                 # as the model never output special_token_id
                 valid_mask = mask[..., offset:offset+1].expand(B, -1, -1)
@@ -519,6 +532,12 @@ class LMModel(StreamingModule):
                     gen_sequence[..., offset:offset+1] == unknown_token,
                     next_token, gen_sequence[..., offset:offset+1]
                 )
+
+                del next_token
+                gc.collect()
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
+
                 prev_offset = offset
                 if callback is not None:
                     callback(1 + offset - start_offset_sequence, gen_sequence_len - start_offset_sequence)
@@ -533,6 +552,11 @@ class LMModel(StreamingModule):
         ).all()
         # get back the codes, trimming the prompt if needed and cutting potentially incomplete timesteps
         out_codes, out_indexes, out_mask = pattern.revert_pattern_sequence(gen_sequence, special_token=unknown_token)
+        
+        del gen_sequence
+        gc.collect()
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
 
         # sanity checks over the returned codes and corresponding masks
         assert (out_codes[..., :max_gen_len] != unknown_token).all()
