@@ -503,6 +503,7 @@ class LMModel(StreamingModule):
             unconditional_state = self.get_streaming_state()
             prev_offset = 0
             gen_sequence_len = gen_sequence.shape[-1]  # gen_sequence shape is [B, K, S]
+            print('Generate <gen_sequence>')
             for offset in tqdm(range(start_offset_sequence, gen_sequence_len)):
                 # get current sequence (note that the streaming API is providing the caching over previous offsets)
                 curr_sequence = gen_sequence[..., prev_offset:offset]

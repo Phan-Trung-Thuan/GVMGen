@@ -104,8 +104,9 @@ class GVMGen(BaseGenModel):
             else:
                 device = 'cpu'
 
-        lm = convert_to_linear8bit(load_lm_model(name, device='cuda:0'), 'cuda:0')
-        compression_model = load_compression_model(name, device='cuda:1')
+        lm = convert_to_linear8bit(load_lm_model(name, device), device)
+        lm.half()
+        compression_model = load_compression_model(name, device)
         if 'self_wav' in lm.condition_provider.conditioners:
             lm.condition_provider.conditioners['self_wav'].match_len_on_eval = True
             lm.condition_provider.conditioners['self_wav']._use_masking = False
@@ -240,7 +241,6 @@ class GVMGen(BaseGenModel):
         if prompt is not None:
             if descriptions is not None:
                 assert len(descriptions) == len(prompt), "Prompt and nb. descriptions doesn't match"
-            prompt = prompt.to('cuda:1')
             prompt_tokens, scale = self.compression_model.encode(prompt)
             assert scale is None
         else:
@@ -282,7 +282,6 @@ class GVMGen(BaseGenModel):
         if self.duration <= self.max_duration:
             # generate by sampling from LM, simple case.
             with self.autocast:
-                prompt_tokens = prompt_tokens.to('cuda:0')
                 gen_tokens = self.lm.generate(
                     prompt_tokens, attributes,
                     callback=callback, max_gen_len=total_gen_len, **self.generation_params)
@@ -323,8 +322,6 @@ class GVMGen(BaseGenModel):
                         [self.sample_rate] * ref_wav[0].size(0),
                         [None], [0.])
                 with self.autocast:
-                    if isinstance(prompt_tokens, torch.Tensor):
-                        prompt_tokens = prompt_tokens.to('cuda:0')
                     gen_tokens = self.lm.generate(
                         prompt_tokens, attributes,
                         callback=callback, max_gen_len=max_gen_len, **self.generation_params)

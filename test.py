@@ -32,9 +32,12 @@ def main():
 
     description = [mp4_pt]
 
+    import time
+    from tqdm import tqdm
+    start = time.time()
     res = model.generate(descriptions = description)
 
-    for idx, one_wav in enumerate(res):
+    for idx, one_wav in tqdm(enumerate(res)):
         # Will save under {idx}.wav, with loudness normalization at -14 db LUFS.
         audio_write(f'{idx}', one_wav.cpu(), model.sample_rate, strategy="loudness", loudness_compressor=True)
         video_mp = mp.VideoFileClip(str(args.video_path))
@@ -55,6 +58,9 @@ def main():
         except Exception as e:
             print(f"error：{e}")
         os.remove(str(idx)+'.wav')
+
+    end = time.time()
+    print(f'Processing time: {end - start}')
 
 if __name__ == '__main__':
     main()
