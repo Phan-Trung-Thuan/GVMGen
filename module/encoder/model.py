@@ -242,13 +242,21 @@ class CustomMultiHeadAttention(nn.Module):
         B, L, _ = x.size()
         return x.view(B, L, self.num_heads, self.head_dim)
 
-    def forward(self, xq, xk=None, xv=None, need_weights=False, attn_mask=None):
+    def forward(self, xq, xk=None, xv=None, need_weights=False, attn_mask=None, device='cuda:0'):
         """
         Self-attention: forward(x)
         Cross-attention: forward(xq, xk, xv)
         """
-        device = xq.device
+
+        # ---- Always use input device ----
+        original_device = xq.device
         self._build_in_proj(device)
+
+        # Ensure projection layers on the same device
+        self.in_proj.to(device)
+        self.out_proj.to(device)
+        self.attn_drop.to(device)
+        self.proj_drop.to(device)
 
         # Put inputs into (B,L,C)
         if not self.batch_first:
@@ -256,38 +264,42 @@ class CustomMultiHeadAttention(nn.Module):
             if xk is not None: xk = xk.transpose(0, 1)
             if xv is not None: xv = xv.transpose(0, 1)
 
-        # Self-attention path
+        # Move inputs to device
+        xq = xq.to(device)
+        if xk is not None: xk = xk.to(device)
+        if xv is not None: xv = xv.to(device)
+
+        # ---- Self-attention ----
         if xk is None and xv is None:
-            # One projection → 3C
-            qkv = self.in_proj(xq)
+            qkv = self.in_proj(xq)  # (B,L,3C)
             q, k, v = qkv.chunk(3, dim=-1)
         else:
-            # Cross-attention: project separately
             if xk is None: xk = xq
             if xv is None: xv = xk
 
+            proj_qkv = self.in_proj(torch.cat([xq, xk, xv], dim=0))  # Not ideal, skip
+            # Instead project separately:
             q = self.in_proj(xq)[..., :self.embed_dim]
             k = self.in_proj(xk)[..., self.embed_dim:2*self.embed_dim]
             v = self.in_proj(xv)[..., 2*self.embed_dim:3*self.embed_dim]
 
-        # reshape
-        q = self._reshape_heads(q).transpose(1, 2)  # (B,h,L,C/h)
-        k = self._reshape_heads(k).transpose(1, 2)
-        v = self._reshape_heads(v).transpose(1, 2)
+        # ---- Reshape heads ----
+        q = self._reshape_heads(q).transpose(1, 2).to(device)
+        k = self._reshape_heads(k).transpose(1, 2).to(device)
+        v = self._reshape_heads(v).transpose(1, 2).to(device)
 
-        # Attention
+        # ---- Attention ----
         scale = 1.0 / math.sqrt(self.head_dim)
-        q = q.to('cuda:1')
-        k = k.to('cuda:1')
         attn = torch.matmul(q, k.transpose(-2, -1)) * scale
 
         if attn_mask is not None:
-            attn = attn + attn_mask.to('cuda:1')
+            attn = attn + attn_mask.to(device)
 
         attn = torch.softmax(attn, dim=-1)
-        attn = self.attn_drop.to('cuda:1')(attn)
+        attn = self.attn_drop(attn)
 
-        out = torch.matmul(attn, v.to('cuda:1')).to('cuda:0')
+        # ---- Output ----
+        out = torch.matmul(attn, v)
         out = out.transpose(1, 2).contiguous().view(xq.size(0), xq.size(1), self.embed_dim)
         out = self.proj_drop(self.out_proj(out))
 
@@ -296,9 +308,11 @@ class CustomMultiHeadAttention(nn.Module):
             out = out.transpose(0, 1)
 
         del attn
-        # torch.cuda.empty_cache()
-        # torch.cuda.ipc_collect()
-        return out, None
+        
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        return out.to(original_device), None
 
 
 class ResidualAttentionBlock(nn.Module):
@@ -318,7 +332,7 @@ class ResidualAttentionBlock(nn.Module):
 
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
+        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask, device='cuda:1')[0]
 
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
@@ -387,13 +401,13 @@ class QFormerLayer(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, x: torch.Tensor):
         # print("-------------", self.layer_idx, "----------------")
-        self_attention_outputs = self.attention(hidden_states, hidden_states, hidden_states)
+        self_attention_outputs = self.attention(hidden_states, hidden_states, hidden_states, device='cuda:1')
         query_attention_output = self_attention_outputs[0]
         query_attention_output = self.self_output(query_attention_output)
         if self.has_cross_attention:
             if x is None:
                 raise ValueError("encoder_hidden_states must be given for cross-attention layers")
-            cross_attention_outputs = self.crossattention(query_attention_output, x, x)
+            cross_attention_outputs = self.crossattention(query_attention_output, x, x, device='cuda:1')
             query_attention_output = cross_attention_outputs[0]
             query_attention_output = self.cross_output(query_attention_output)
         
