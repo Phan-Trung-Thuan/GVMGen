@@ -108,7 +108,7 @@ class GVMGen(BaseGenModel):
                 device = 'cpu'
 
         lm = convert_to_linear4bit(load_lm_model(name, device))
-        # lm.half()
+        lm.half()
         compression_model = load_compression_model(name, device)
         if 'self_wav' in lm.condition_provider.conditioners:
             lm.condition_provider.conditioners['self_wav'].match_len_on_eval = True
