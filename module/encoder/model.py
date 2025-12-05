@@ -221,7 +221,7 @@ class CustomMultiHeadAttention(nn.Module):
             self.in_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim)
             self.in_proj.weight = self.in_proj_weight
             self.in_proj.bias = self.in_proj_bias
-            
+
         # x: (L, B, C)
         q, k, v = self._in_proj_qkv(x)
 
@@ -262,8 +262,8 @@ class ResidualAttentionBlock(nn.Module):
 
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
-        # return self.attn(x, attn_mask=self.attn_mask)[0]
+        # return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
+        return self.attn(x, attn_mask=self.attn_mask)[0]
 
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
