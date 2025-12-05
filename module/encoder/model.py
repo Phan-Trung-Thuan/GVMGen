@@ -218,7 +218,7 @@ class CustomMultiHeadAttention(nn.Module):
             self.embed_dim,
             self.embed_dim * 3,
             bias=True,
-            compute_dtype=torch.float32,
+            compute_dtype=torch.float16,
             quant_type="nf4",
         )
 
@@ -235,7 +235,6 @@ class CustomMultiHeadAttention(nn.Module):
         del self.in_proj_bias
         gc.collect()
         torch.cuda.empty_cache()
-
 
     # helper
     def _reshape_heads(self, x):
@@ -278,15 +277,17 @@ class CustomMultiHeadAttention(nn.Module):
 
         # Attention
         scale = 1.0 / math.sqrt(self.head_dim)
+        q = q.to('cuda:1')
+        k = k.to('cuda:1')
         attn = torch.matmul(q, k.transpose(-2, -1)) * scale
 
         if attn_mask is not None:
-            attn = attn + attn_mask
+            attn = attn + attn_mask.to('cuda:1')
 
         attn = torch.softmax(attn, dim=-1)
-        attn = self.attn_drop(attn)
+        attn = self.attn_drop.to('cuda:1')(attn)
 
-        out = torch.matmul(attn, v)
+        out = torch.matmul(attn, v.to('cuda:1')).to('cuda:0')
         out = out.transpose(1, 2).contiguous().view(xq.size(0), xq.size(1), self.embed_dim)
         out = self.proj_drop(self.out_proj(out))
 
