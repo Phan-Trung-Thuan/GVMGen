@@ -243,8 +243,8 @@ class ResidualAttentionBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
         super().__init__()
 
-        self.attn = nn.MultiheadAttention(d_model, n_head)
-        # self.attn = CustomMultiHeadAttention(d_model, n_head)
+        # self.attn = nn.MultiheadAttention(d_model, n_head)
+        self.attn = CustomMultiHeadAttention(d_model, n_head)
         self.ln_1 = LayerNorm(d_model)
         self.mlp = nn.Sequential(OrderedDict([
             ("c_fc", nn.Linear(d_model, d_model * 4)),
@@ -256,7 +256,6 @@ class ResidualAttentionBlock(nn.Module):
 
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        print(x.shape)
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
         # return self.attn(x, attn_mask=self.attn_mask)[0]
 
