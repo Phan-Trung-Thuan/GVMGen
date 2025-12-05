@@ -224,11 +224,11 @@ class CustomMultiHeadAttention(nn.Module):
 
         # quantize weight
         q_w, q_state = quantize_nf4(self.in_proj_weight.data)
-        self.in_proj.weight.data = q_w.to(device)
+        self.in_proj.weight.data = q_w
         self.in_proj.weight.quant_state = q_state
 
         # copy bias
-        self.in_proj.bias.data = self.in_proj_bias.data.to(device)
+        self.in_proj.bias.data = self.in_proj_bias.data
 
         # After this point NEVER use in_proj_weight or in_proj_bias again
 
