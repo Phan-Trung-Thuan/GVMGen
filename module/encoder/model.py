@@ -286,6 +286,9 @@ class CustomMultiHeadAttention(nn.Module):
         if not self.batch_first:
             out = out.transpose(0, 1)
 
+        del attn
+        torch.cuda.empty_cache()
+        torch.cuda.ipc_collect()
         return out
 
 
