@@ -339,7 +339,7 @@ class VisionTransformer(nn.Module):
                 nn.init.normal_(block.cross_output.dense.weight, std=fc_std)
 
     def forward(self, x: torch.Tensor):
-        print(x.dtype, next(self.transformer.parameters()).dtype)
+        print(self.conv1)
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         print(x.dtype, next(self.transformer.parameters()).dtype)
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
