@@ -236,7 +236,7 @@ class CustomMultiHeadAttention(nn.Module):
         B, L, _ = x.size()
         return x.view(B, L, self.num_heads, self.head_dim)
 
-    def forward(self, xq, xk=None, xv=None, attn_mask=None):
+    def forward(self, xq, xk=None, xv=None, need_weights=False, attn_mask=None):
         """
         Self-attention: forward(x)
         Cross-attention: forward(xq, xk, xv)
