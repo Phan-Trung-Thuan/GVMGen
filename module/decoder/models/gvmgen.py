@@ -62,8 +62,8 @@ def convert_to_linear4bit(model, device):
             bias = module.bias is not None
 
             new_linear = bnb.nn.Linear4bit(
-                in_features=in_f,
-                out_features=out_f,
+                input_features=in_f,
+                output_features=out_f,
                 bias=bias,
                 compute_dtype=torch.float32,    # QUAN TRỌNG
                 compress_statistics=True,
