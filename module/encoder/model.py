@@ -193,6 +193,11 @@ class CustomMultiHeadAttention(nn.Module):
         # giống MultiheadAttention
         nn.init.xavier_uniform_(self.in_proj_weight)
         nn.init.constant_(self.in_proj_bias, 0.)
+
+        self.in_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim)
+        self.in_proj.weight = self.in_proj_weight
+        self.in_proj.bias = self.in_proj_bias
+
         nn.init.xavier_uniform_(self.out_proj.weight)
         nn.init.constant_(self.out_proj.bias, 0.)
 
@@ -201,15 +206,15 @@ class CustomMultiHeadAttention(nn.Module):
         x: (L, B, C)
         return q, k, v: mỗi cái (L, B, num_heads, head_dim)
         """
-        W = self.in_proj_weight
-        b = self.in_proj_bias
+        # dùng Linear duy nhất
+        qkv = self.in_proj(x)   # shape = (L, B, 3*embed_dim)
 
-        q = F.linear(x, W[0:self.embed_dim], b[0:self.embed_dim])
-        k = F.linear(x, W[self.embed_dim:2*self.embed_dim], b[self.embed_dim:2*self.embed_dim])
-        v = F.linear(x, W[2*self.embed_dim:3*self.embed_dim], b[2*self.embed_dim:3*self.embed_dim])
-
+        # tách thành q, k, v
+        q, k, v = qkv.chunk(3, dim=-1)
+        
         # reshape multihead
         L, B, _ = x.size()
+        
         q = q.view(L, B, self.num_heads, self.head_dim)
         k = k.view(L, B, self.num_heads, self.head_dim)
         v = v.view(L, B, self.num_heads, self.head_dim)
@@ -221,7 +226,7 @@ class CustomMultiHeadAttention(nn.Module):
 
         # scaled dot-product attention
         scale = 1.0 / math.sqrt(self.head_dim)
-        print(q.shape)
+        
         attn = torch.matmul(q.transpose(1, 2), k.transpose(1, 2).transpose(-2, -1)) * scale
         # shape: (B, num_heads, L, L)
 
