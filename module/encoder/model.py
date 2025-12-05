@@ -189,14 +189,13 @@ class CustomMultiHeadAttention(nn.Module):
         self.head_dim  = embed_dim // num_heads
         self.batch_first = batch_first
 
-        # --- gộp q,k,v vào 1 projection ---
+        # Weights for 4-bit quantization before converting:
         self.in_proj_weight = nn.Parameter(torch.empty(3 * embed_dim, embed_dim))
         self.in_proj_bias   = nn.Parameter(torch.empty(3 * embed_dim))
 
-        # out projection
+        # Out projection
         self.out_proj = nn.Linear(embed_dim, embed_dim)
 
-        # dropout như PyTorch
         self.attn_drop = nn.Dropout(dropout)
         self.proj_drop = nn.Dropout(dropout)
 
@@ -205,65 +204,73 @@ class CustomMultiHeadAttention(nn.Module):
     def _reset_parameters(self):
         nn.init.xavier_uniform_(self.in_proj_weight)
         nn.init.constant_(self.in_proj_bias, 0.)
-
         nn.init.xavier_uniform_(self.out_proj.weight)
         nn.init.constant_(self.out_proj.bias, 0.)
 
-    def _in_proj_qkv(self, x):
+    # Create quantized in_proj only once
+    def _build_in_proj(self, device):
+        if hasattr(self, "in_proj"):
+            return
+
+        self.in_proj = Linear4bit(
+            self.embed_dim,
+            self.embed_dim * 3,
+            bias=True,
+            compute_dtype=torch.float32,
+            quant_type="nf4",
+        )
+
+        # quantize weight
+        q_w, q_state = quantize_nf4(self.in_proj_weight.data)
+        self.in_proj.weight.data = q_w.to(device)
+        self.in_proj.weight.quant_state = q_state
+
+        # copy bias
+        self.in_proj.bias.data = self.in_proj_bias.data.to(device)
+
+        # After this point NEVER use in_proj_weight or in_proj_bias again
+
+    # helper
+    def _reshape_heads(self, x):
+        # x: (B, L, C)
+        B, L, _ = x.size()
+        return x.view(B, L, self.num_heads, self.head_dim)
+
+    def forward(self, xq, xk=None, xv=None, attn_mask=None):
         """
-        x: (L, B, C) hoặc (B, L, C) tùy batch_first
+        Self-attention: forward(x)
+        Cross-attention: forward(xq, xk, xv)
         """
-        if not hasattr(self, "in_proj"):
-            # tạo Linear wrapper dùng chung W, b
-            self.in_proj = Linear4bit(
-                self.embed_dim,
-                self.embed_dim * 3,
-                bias=True,
-                compute_dtype=torch.float32,
-                quant_type="nf4"
-            )
-            quant_w, quant_state = quantize_nf4(self.in_proj_weight.data)
-            self.in_proj.weight.data = quant_w
-            self.in_proj.weight.quant_state = quant_state
+        device = xq.device
+        self._build_in_proj(device)
 
-            # bias vẫn copy bình thường
-            if self.in_proj.bias is not None:
-                self.in_proj.bias = self.in_proj_bias.cuda()
-
-        qkv = self.in_proj(x)   # (L,B,3C) hoặc (B,L,3C)
-        q, k, v = qkv.chunk(3, dim=-1)
-
-        # reshape multihead
-        # luôn để cuối thành: (..., num_heads, head_dim)
-        new_shape = q.shape[:-1] + (self.num_heads, self.head_dim)
-
-        return q.view(new_shape), k.view(new_shape), v.view(new_shape)
-
-    def forward(self, x, attn_mask=None):
-        """
-        x: (B, L, C) nếu batch_first=True
-           (L, B, C) nếu batch_first=False
-        """
-
-        # chuẩn hóa shape về (B, L, C)
+        # Put inputs into (B,L,C)
         if not self.batch_first:
-            # (L, B, C) -> (B, L, C)
-            x = x.transpose(0, 1)
+            xq = xq.transpose(0, 1)
+            if xk is not None: xk = xk.transpose(0, 1)
+            if xv is not None: xv = xv.transpose(0, 1)
 
-        B, L, C = x.size()
+        # Self-attention path
+        if xk is None and xv is None:
+            # One projection → 3C
+            qkv = self.in_proj(xq)
+            q, k, v = qkv.chunk(3, dim=-1)
+        else:
+            # Cross-attention: project separately
+            if xk is None: xk = xq
+            if xv is None: xv = xk
 
-        # q,k,v: (B, L, num_heads, head_dim)
-        q, k, v = self._in_proj_qkv(x)
+            q = self.in_proj(xq)[..., :self.embed_dim]
+            k = self.in_proj(xk)[..., self.embed_dim:2*self.embed_dim]
+            v = self.in_proj(xv)[..., 2*self.embed_dim:3*self.embed_dim]
 
-        # move head vào dimension đúng cho attention:
-        # (B, num_heads, L, head_dim)
-        q = q.transpose(1, 2)
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
+        # reshape
+        q = self._reshape_heads(q).transpose(1, 2)  # (B,h,L,C/h)
+        k = self._reshape_heads(k).transpose(1, 2)
+        v = self._reshape_heads(v).transpose(1, 2)
 
+        # Attention
         scale = 1.0 / math.sqrt(self.head_dim)
-
-        # attention scores: (B, num_heads, L, L)
         attn = torch.matmul(q, k.transpose(-2, -1)) * scale
 
         if attn_mask is not None:
@@ -272,23 +279,18 @@ class CustomMultiHeadAttention(nn.Module):
         attn = torch.softmax(attn, dim=-1)
         attn = self.attn_drop(attn)
 
-        # output: (B, num_heads, L, head_dim)
         out = torch.matmul(attn, v)
-
-        # gộp heads: (B, L, C)
-        out = out.transpose(1, 2).contiguous().view(B, L, C)
-
-        # out projection + dropout
+        out = out.transpose(1, 2).contiguous().view(xq.size(0), xq.size(1), self.embed_dim)
         out = self.proj_drop(self.out_proj(out))
 
-        # trả lại shape gốc
+        # Convert back to (L,B,C)
         if not self.batch_first:
             out = out.transpose(0, 1)
 
         del attn
         torch.cuda.empty_cache()
         torch.cuda.ipc_collect()
-        return out
+        return out, None
 
 
 class ResidualAttentionBlock(nn.Module):
@@ -308,8 +310,7 @@ class ResidualAttentionBlock(nn.Module):
 
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        # return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
-        return self.attn(x, attn_mask=self.attn_mask)[0]
+        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
 
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
@@ -378,8 +379,7 @@ class QFormerLayer(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, x: torch.Tensor):
         # print("-------------", self.layer_idx, "----------------")
-        # self_attention_outputs = self.attention(hidden_states, hidden_states, hidden_states)
-        self_attention_outputs = self.attention(hidden_states)
+        self_attention_outputs = self.attention(hidden_states, hidden_states, hidden_states)
         query_attention_output = self_attention_outputs[0]
         query_attention_output = self.self_output(query_attention_output)
         if self.has_cross_attention:
