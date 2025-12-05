@@ -339,6 +339,7 @@ class VisionTransformer(nn.Module):
                 nn.init.normal_(block.cross_output.dense.weight, std=fc_std)
 
     def forward(self, x: torch.Tensor):
+        print(x.dtype, next(self.transformer.parameters()).dtype)
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
@@ -446,7 +447,6 @@ class CLIP(nn.Module):
         return self.visual.conv1.weight.dtype
 
     def encode_image(self, image):
-        print(image.dtype, self.dtype)
         return self.visual(image.type(self.dtype))
 
 def convert_weights(model: nn.Module):
