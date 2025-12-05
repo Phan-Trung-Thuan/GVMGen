@@ -62,10 +62,14 @@ def convert_to_linear4bit(model, device):
             bias = module.bias is not None
 
             new_linear = bnb.nn.Linear4bit(
-                in_f,
-                out_f,
+                in_features=in_f,
+                out_features=out_f,
                 bias=bias,
+                compute_dtype=torch.float32,    # QUAN TRỌNG
+                compress_statistics=True,
+                quant_type="nf4"                # hoặc "fp4"
             )
+
             
             # copy weight/bias từ Linear cũ
             new_linear.load_state_dict(module.state_dict())
@@ -105,7 +109,8 @@ class GVMGen(BaseGenModel):
                 device = 'cpu'
 
         lm = convert_to_linear4bit(load_lm_model(name, device), device)
-        lm.half()
+        print(next(lm.parameters()).dtype)
+        # lm.half()
         compression_model = load_compression_model(name, device)
         if 'self_wav' in lm.condition_provider.conditioners:
             lm.condition_provider.conditioners['self_wav'].match_len_on_eval = True
