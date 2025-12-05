@@ -41,8 +41,21 @@ def main():
         # Will save under {idx}.wav, with loudness normalization at -14 db LUFS.
         audio_write(f'{idx}', one_wav.cpu(), model.sample_rate, strategy="loudness", loudness_compressor=True)
         video_mp = mp.VideoFileClip(str(args.video_path))
+        video_ms = int(video_mp.duration * 1000)
+
         audio_clip = AudioSegment.from_wav(str(idx)+'.wav')
-        audio_clip[0:int(video_mp.duration*1000)].export(str(idx)+'.wav')
+
+        # Pad or trim precisely to match video duration
+        if len(audio_clip) < video_ms:
+            # Add silence if audio is shorter
+            silence = AudioSegment.silent(duration=video_ms - len(audio_clip))
+            audio_clip = audio_clip + silence
+        else:
+            # Trim if too long
+            audio_clip = audio_clip[:video_ms]
+
+        audio_clip.export(str(idx)+'.wav')
+        
         # Render generated music into input video
         audio_mp = mp.AudioFileClip(str(str(idx)+'.wav'))
 
