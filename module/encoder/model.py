@@ -170,61 +170,72 @@ class QuickGELU(nn.Module):
         return x * torch.sigmoid(1.702 * x)
 
 
+import math
 class CustomMultiHeadAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads, bias=True):
+    def __init__(self, embed_dim: int, num_heads: int):
         super().__init__()
-        assert embed_dim % num_heads == 0, "embed dim phải chia hết cho num_heads"
+        assert embed_dim % num_heads == 0
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.head_dim = embed_dim // num_heads
 
-        # Bạn có thể thay 4 lớp Linear này bằng bnb.nn.Linear4bit
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        # --- gộp q,k,v vào 1 layer y như PyTorch ---
+        self.in_proj_weight = nn.Parameter(torch.empty(3 * embed_dim, embed_dim))
+        self.in_proj_bias   = nn.Parameter(torch.empty(3 * embed_dim))
+
+        # --- out projection ---
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        # giống MultiheadAttention
+        nn.init.xavier_uniform_(self.in_proj_weight)
+        nn.init.constant_(self.in_proj_bias, 0.)
+        nn.init.xavier_uniform_(self.out_proj.weight)
+        nn.init.constant_(self.out_proj.bias, 0.)
+
+    def _in_proj_qkv(self, x):
+        """
+        x: (L, B, C)
+        return q, k, v: mỗi cái (L, B, num_heads, head_dim)
+        """
+        W = self.in_proj_weight
+        b = self.in_proj_bias
+
+        q = F.linear(x, W[0:self.embed_dim], b[0:self.embed_dim])
+        k = F.linear(x, W[self.embed_dim:2*self.embed_dim], b[self.embed_dim:2*self.embed_dim])
+        v = F.linear(x, W[2*self.embed_dim:3*self.embed_dim], b[2*self.embed_dim:3*self.embed_dim])
+
+        # reshape multihead
+        L, B, _ = x.size()
+        q = q.view(L, B, self.num_heads, self.head_dim)
+        k = k.view(L, B, self.num_heads, self.head_dim)
+        v = v.view(L, B, self.num_heads, self.head_dim)
+        return q, k, v
 
     def forward(self, x, attn_mask=None):
-        """
-        x shape: (seq_len, batch, embed_dim)
-        """
+        # x: (L, B, C)
+        q, k, v = self._in_proj_qkv(x)
 
-        seq_len, batch_size, embed_dim = x.shape
+        # scaled dot-product attention
+        scale = 1.0 / math.sqrt(self.head_dim)
+        attn = torch.matmul(q.transpose(1, 2), k.transpose(1, 2).transpose(-2, -1)) * scale
+        # shape: (B, num_heads, L, L)
 
-        # Q, K, V
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
-
-        # reshape thành nhiều heads
-        q = q.reshape(seq_len, batch_size, self.num_heads, self.head_dim).transpose(1, 2)
-        k = k.reshape(seq_len, batch_size, self.num_heads, self.head_dim).transpose(1, 2)
-        v = v.reshape(seq_len, batch_size, self.num_heads, self.head_dim).transpose(1, 2)
-
-        # q, k, v shape: (batch, heads, seq_len, head_dim)
-
-        # attention score
-        attn_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
-
-        # mask nếu có
         if attn_mask is not None:
-            attn_scores = attn_scores + attn_mask  # mask phải cùng dtype
+            attn = attn + attn_mask
 
-        # softmax
-        attn_weights = F.softmax(attn_scores, dim=-1)
+        attn = torch.softmax(attn, dim=-1)
 
-        # output attention
-        attn_output = torch.matmul(attn_weights, v)
-        # shape: (batch, heads, seq_len, head_dim)
+        out = torch.matmul(attn, v.transpose(1, 2))
+        # (B, num_heads, L, head_dim)
 
-        # ghép heads
-        attn_output = attn_output.transpose(1, 2).reshape(seq_len, batch_size, embed_dim)
+        out = out.transpose(1, 2).contiguous()  # (B, L, C)
+        out = out.view(x.size(0), x.size(1), self.embed_dim)
 
-        # out projection
-        out = self.out_proj(attn_output)
-
-        return out
+        return self.out_proj(out)
 
 
 class ResidualAttentionBlock(nn.Module):
