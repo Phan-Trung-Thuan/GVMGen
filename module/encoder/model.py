@@ -231,10 +231,6 @@ class CustomMultiHeadAttention(nn.Module):
         self.in_proj.bias.data = self.in_proj_bias.data.to(device)
 
         # After this point NEVER use in_proj_weight or in_proj_bias again
-        del self.in_proj_weight
-        del self.in_proj_bias
-        gc.collect()
-        torch.cuda.empty_cache()
 
     # helper
     def _reshape_heads(self, x):
