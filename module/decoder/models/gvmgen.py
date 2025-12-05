@@ -73,7 +73,7 @@ def convert_to_linear4bit(model, device):
             
             # copy weight/bias từ Linear cũ
             new_linear.load_state_dict(module.state_dict())
-            new_linear = new_linear.to(device)
+            new_linear = new_linear.cuda()
 
             setattr(model, name, new_linear)
 
@@ -109,7 +109,6 @@ class GVMGen(BaseGenModel):
                 device = 'cpu'
 
         lm = convert_to_linear4bit(load_lm_model(name, device), device)
-        print(next(lm.parameters()).dtype)
         # lm.half()
         compression_model = load_compression_model(name, device)
         if 'self_wav' in lm.condition_provider.conditioners:
