@@ -202,6 +202,7 @@ class Transformer(nn.Module):
         self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)])
 
     def forward(self, x: torch.Tensor):
+        print(x.dtype)
         return self.resblocks(x)
 
 class QFormerIntermediate(nn.Module):
@@ -339,9 +340,7 @@ class VisionTransformer(nn.Module):
                 nn.init.normal_(block.cross_output.dense.weight, std=fc_std)
 
     def forward(self, x: torch.Tensor):
-        print(self.transformer)
         x = self.conv1(x)  # shape = [*, width, grid, grid]
-        print(x.dtype, next(self.transformer.parameters()).dtype)
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
         x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
         x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)  # shape = [*, grid ** 2 + 1, width]
