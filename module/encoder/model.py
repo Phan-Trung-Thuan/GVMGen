@@ -296,8 +296,8 @@ class CustomMultiHeadAttention(nn.Module):
             out = out.transpose(0, 1)
 
         del attn
-        torch.cuda.empty_cache()
-        torch.cuda.ipc_collect()
+        # torch.cuda.empty_cache()
+        # torch.cuda.ipc_collect()
         return out, None
 
 
