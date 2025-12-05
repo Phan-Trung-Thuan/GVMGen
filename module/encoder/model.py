@@ -346,7 +346,8 @@ class VisionTransformer(nn.Module):
         x = x + self.positional_embedding.to(x.dtype)
         x = self.ln_pre(x)
 
-        x = x.permute(1, 0, 2)  # NLD -> LND
+        x = x.permute(1, 0, 2)  # NLD -> 
+        print(x.dtype, next(self.transformer()).dtype)
         x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
 
