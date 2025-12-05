@@ -446,6 +446,7 @@ class CLIP(nn.Module):
         return self.visual.conv1.weight.dtype
 
     def encode_image(self, image):
+        print(image.dtype, self.dtype)
         return self.visual(image.type(self.dtype))
 
 def convert_weights(model: nn.Module):
