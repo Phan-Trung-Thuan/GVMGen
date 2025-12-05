@@ -65,7 +65,7 @@ def convert_to_linear4bit(model):
                 module.in_features,
                 module.out_features,
                 bias=(module.bias is not None),
-                compute_dtype=torch.float32,
+                compute_dtype=torch.float16,
                 quant_type="nf4"
             ).cuda()
 
