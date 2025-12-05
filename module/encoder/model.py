@@ -171,26 +171,38 @@ class QuickGELU(nn.Module):
 
 
 import math
+from bitsandbytes.nn import Linear4bit
+from bitsandbytes.functional import quantize_nf4
 class CustomMultiHeadAttention(nn.Module):
-    def __init__(self, embed_dim: int, num_heads: int):
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        batch_first: bool = False,
+    ):
         super().__init__()
         assert embed_dim % num_heads == 0
 
         self.embed_dim = embed_dim
         self.num_heads = num_heads
-        self.head_dim = embed_dim // num_heads
+        self.head_dim  = embed_dim // num_heads
+        self.batch_first = batch_first
 
-        # --- gộp q,k,v vào 1 layer y như PyTorch ---
+        # --- gộp q,k,v vào 1 projection ---
         self.in_proj_weight = nn.Parameter(torch.empty(3 * embed_dim, embed_dim))
         self.in_proj_bias   = nn.Parameter(torch.empty(3 * embed_dim))
 
-        # --- out projection ---
+        # out projection
         self.out_proj = nn.Linear(embed_dim, embed_dim)
+
+        # dropout như PyTorch
+        self.attn_drop = nn.Dropout(dropout)
+        self.proj_drop = nn.Dropout(dropout)
 
         self._reset_parameters()
 
     def _reset_parameters(self):
-        # giống MultiheadAttention
         nn.init.xavier_uniform_(self.in_proj_weight)
         nn.init.constant_(self.in_proj_bias, 0.)
 
@@ -199,50 +211,81 @@ class CustomMultiHeadAttention(nn.Module):
 
     def _in_proj_qkv(self, x):
         """
-        x: (L, B, C)
-        return q, k, v: mỗi cái (L, B, num_heads, head_dim)
+        x: (L, B, C) hoặc (B, L, C) tùy batch_first
         """
-        # dùng Linear duy nhất
-        qkv = self.in_proj(x)   # shape = (L, B, 3*embed_dim)
+        if not hasattr(self, "in_proj"):
+            # tạo Linear wrapper dùng chung W, b
+            self.in_proj = Linear4bit(
+                self.embed_dim,
+                self.embed_dim * 3,
+                bias=True,
+                compute_dtype=torch.float32,
+                quant_type="nf4"
+            )
+            quant_w, quant_state = quantize_nf4(self.in_proj_weight.data)
+            self.in_proj.weight.data = quant_w
+            self.in_proj.weight.quant_state = quant_state
 
-        # tách thành q, k, v
+            # bias vẫn copy bình thường
+            if self.in_proj.bias is not None:
+                self.in_proj.bias = self.in_proj_bias.cuda()
+
+        qkv = self.in_proj(x)   # (L,B,3C) hoặc (B,L,3C)
         q, k, v = qkv.chunk(3, dim=-1)
 
         # reshape multihead
-        L, B, _ = x.size()
-        
-        q = q.view(L, B, self.num_heads, self.head_dim)
-        k = k.view(L, B, self.num_heads, self.head_dim)
-        v = v.view(L, B, self.num_heads, self.head_dim)
-        return q, k, v
+        # luôn để cuối thành: (..., num_heads, head_dim)
+        new_shape = q.shape[:-1] + (self.num_heads, self.head_dim)
+
+        return q.view(new_shape), k.view(new_shape), v.view(new_shape)
 
     def forward(self, x, attn_mask=None):
-        if not hasattr(self, "in_proj"):
-            self.in_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim)
-            self.in_proj.weight = self.in_proj_weight
-            self.in_proj.bias = self.in_proj_bias
+        """
+        x: (B, L, C) nếu batch_first=True
+           (L, B, C) nếu batch_first=False
+        """
 
-        # x: (L, B, C)
+        # chuẩn hóa shape về (B, L, C)
+        if not self.batch_first:
+            # (L, B, C) -> (B, L, C)
+            x = x.transpose(0, 1)
+
+        B, L, C = x.size()
+
+        # q,k,v: (B, L, num_heads, head_dim)
         q, k, v = self._in_proj_qkv(x)
 
-        # scaled dot-product attention
+        # move head vào dimension đúng cho attention:
+        # (B, num_heads, L, head_dim)
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
         scale = 1.0 / math.sqrt(self.head_dim)
-        
-        attn = torch.matmul(q.transpose(1, 2), k.transpose(1, 2).transpose(-2, -1)) * scale
-        # shape: (B, num_heads, L, L)
+
+        # attention scores: (B, num_heads, L, L)
+        attn = torch.matmul(q, k.transpose(-2, -1)) * scale
 
         if attn_mask is not None:
             attn = attn + attn_mask
 
         attn = torch.softmax(attn, dim=-1)
+        attn = self.attn_drop(attn)
 
-        out = torch.matmul(attn, v.transpose(1, 2))
-        # (B, num_heads, L, head_dim)
+        # output: (B, num_heads, L, head_dim)
+        out = torch.matmul(attn, v)
 
-        out = out.transpose(1, 2).contiguous()  # (B, L, C)
-        out = out.view(x.size(0), x.size(1), self.embed_dim)
+        # gộp heads: (B, L, C)
+        out = out.transpose(1, 2).contiguous().view(B, L, C)
 
-        return self.out_proj(out)
+        # out projection + dropout
+        out = self.proj_drop(self.out_proj(out))
+
+        # trả lại shape gốc
+        if not self.batch_first:
+            out = out.transpose(0, 1)
+
+        return out
 
 
 class ResidualAttentionBlock(nn.Module):
@@ -308,7 +351,7 @@ class QFormerOutput(nn.Module):
 class QFormerLayer(nn.Module):
     def __init__(self, d_model, heads, layer_idx: int, drop_out, layer_norm_eps, cross_attention_frequency):
         super().__init__()
-        self.attention = nn.MultiheadAttention(d_model, heads, dropout=drop_out, batch_first=True)
+        self.attention = CustomMultiHeadAttention(d_model, heads, dropout=drop_out, batch_first=True)
         self.self_output = nn.Sequential(OrderedDict([
             ("dense", nn.Linear(d_model, d_model)),
             ("LayerNorm", LayerNorm(d_model, eps = layer_norm_eps)),
@@ -317,7 +360,7 @@ class QFormerLayer(nn.Module):
         self.layer_idx = layer_idx
 
         if layer_idx % cross_attention_frequency == 0:
-            self.crossattention = nn.MultiheadAttention(d_model, heads, dropout=drop_out, batch_first=True)
+            self.crossattention = CustomMultiHeadAttention(d_model, heads, dropout=drop_out, batch_first=True)
             self.cross_output = nn.Sequential(OrderedDict([
                 ("dense", nn.Linear(d_model, d_model)),
                 ("LayerNorm", LayerNorm(d_model, eps = layer_norm_eps)),
