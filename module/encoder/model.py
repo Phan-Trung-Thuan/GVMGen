@@ -264,6 +264,7 @@ class CustomMultiHeadAttention(nn.Module):
         scale = 1.0 / math.sqrt(self.head_dim)
 
         # attention scores: (B, num_heads, L, L)
+        print(q.shape)
         attn = torch.matmul(q, k.transpose(-2, -1)) * scale
 
         if attn_mask is not None:
