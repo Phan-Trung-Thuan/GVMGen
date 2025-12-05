@@ -186,8 +186,10 @@ class ResidualAttentionBlock(nn.Module):
 
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        print(x.dtype, next(self.attn.parameters()).dtype, self.attn_mask.dtype)
-        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
+        print(x.dtype, next(self.attn.parameters()).dtype)
+        
+        with torch.cuda.amp.autocast(enabled=False):
+            return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
 
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
