@@ -264,7 +264,6 @@ class CustomMultiHeadAttention(nn.Module):
         scale = 1.0 / math.sqrt(self.head_dim)
 
         # attention scores: (B, num_heads, L, L)
-        print(q.shape)
         attn = torch.matmul(q, k.transpose(-2, -1)) * scale
 
         if attn_mask is not None:
@@ -379,7 +378,8 @@ class QFormerLayer(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, x: torch.Tensor):
         # print("-------------", self.layer_idx, "----------------")
-        self_attention_outputs = self.attention(hidden_states, hidden_states, hidden_states)
+        # self_attention_outputs = self.attention(hidden_states, hidden_states, hidden_states)
+        self_attention_outputs = self.attention(hidden_states)
         query_attention_output = self_attention_outputs[0]
         query_attention_output = self.self_output(query_attention_output)
         if self.has_cross_attention:
