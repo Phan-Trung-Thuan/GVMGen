@@ -170,11 +170,69 @@ class QuickGELU(nn.Module):
         return x * torch.sigmoid(1.702 * x)
 
 
+class CustomMultiHeadAttention(nn.Module):
+    def __init__(self, embed_dim, num_heads, bias=True):
+        super().__init__()
+        assert embed_dim % num_heads == 0, "embed dim phải chia hết cho num_heads"
+
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+
+        # Bạn có thể thay 4 lớp Linear này bằng bnb.nn.Linear4bit
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+
+    def forward(self, x, attn_mask=None):
+        """
+        x shape: (seq_len, batch, embed_dim)
+        """
+
+        seq_len, batch_size, embed_dim = x.shape
+
+        # Q, K, V
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+
+        # reshape thành nhiều heads
+        q = q.reshape(seq_len, batch_size, self.num_heads, self.head_dim).transpose(1, 2)
+        k = k.reshape(seq_len, batch_size, self.num_heads, self.head_dim).transpose(1, 2)
+        v = v.reshape(seq_len, batch_size, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # q, k, v shape: (batch, heads, seq_len, head_dim)
+
+        # attention score
+        attn_scores = torch.matmul(q, k.transpose(-2, -1)) / (self.head_dim ** 0.5)
+
+        # mask nếu có
+        if attn_mask is not None:
+            attn_scores = attn_scores + attn_mask  # mask phải cùng dtype
+
+        # softmax
+        attn_weights = F.softmax(attn_scores, dim=-1)
+
+        # output attention
+        attn_output = torch.matmul(attn_weights, v)
+        # shape: (batch, heads, seq_len, head_dim)
+
+        # ghép heads
+        attn_output = attn_output.transpose(1, 2).reshape(seq_len, batch_size, embed_dim)
+
+        # out projection
+        out = self.out_proj(attn_output)
+
+        return out
+
+
 class ResidualAttentionBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
         super().__init__()
 
-        self.attn = nn.MultiheadAttention(d_model, n_head)
+        # self.attn = nn.MultiheadAttention(d_model, n_head)
+        self.attn = CustomMultiHeadAttention(d_model, n_head)
         self.ln_1 = LayerNorm(d_model)
         self.mlp = nn.Sequential(OrderedDict([
             ("c_fc", nn.Linear(d_model, d_model * 4)),
