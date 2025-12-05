@@ -541,8 +541,6 @@ class CLIPConditioner(VideoConditioner):
 
         video = video.reshape(video.shape[0] * video.shape[1], video.shape[-3], video.shape[-2], video.shape[-1])
         with torch.set_grad_enabled(self.finetune):
-            print(video.dtype)
-            print(self.clip)
             embeds = self.clip.encode_image(video)
         embeds = embeds.reshape(mask.shape[0], mask.shape[1], -1)
 

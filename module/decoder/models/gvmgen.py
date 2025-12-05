@@ -28,6 +28,8 @@ MelodyList = tp.List[tp.Optional[torch.Tensor]]
 MelodyType = tp.Union[torch.Tensor, MelodyList]
 
 import bitsandbytes as bnb
+from bitsandbytes.nn import Linear4bit
+from bitsandbytes.functional import quantize_nf4
 
 def convert_to_linear8bit(model, device):
     for name, module in model.named_children():
@@ -53,34 +55,31 @@ def convert_to_linear8bit(model, device):
 
     return model
 
-def convert_to_linear4bit(model, device):
+def convert_to_linear4bit(model):
     for name, module in model.named_children():
-        # Nếu gặp Linear → thay bằng Linear8bitLt
         if isinstance(module, torch.nn.Linear):
-            in_f = module.in_features
-            out_f = module.out_features
-            bias = module.bias is not None
+            # Lượng tử hóa weight
+            quant_w, quant_state = quantize_nf4(module.weight.data)
 
-            new_linear = bnb.nn.Linear4bit(
-                input_features=in_f,
-                output_features=out_f,
-                bias=bias,
-                compute_dtype=torch.float32,    # QUAN TRỌNG
-                compress_statistics=True,
-                quant_type="nf4"                # hoặc "fp4"
-            )
+            new_linear = Linear4bit(
+                module.in_features,
+                module.out_features,
+                bias=(module.bias is not None),
+                compute_dtype=torch.float32,
+                quant_type="nf4"
+            ).cuda()
 
-            
-            # copy weight/bias từ Linear cũ
-            new_linear.load_state_dict(module.state_dict())
-            new_linear = new_linear.cuda()
+            # gán weight 4-bit
+            new_linear.weight.data = quant_w
+            new_linear.weight.quant_state = quant_state
+
+            # bias vẫn copy bình thường
+            if module.bias is not None:
+                new_linear.bias = module.bias.cuda()
 
             setattr(model, name, new_linear)
-
         else:
-            # Đệ quy để đi sâu vào model
-            convert_to_linear4bit(module, device)
-
+            convert_to_linear4bit(module)
     return model
 
 class GVMGen(BaseGenModel):
