@@ -221,6 +221,7 @@ class CustomMultiHeadAttention(nn.Module):
 
         # scaled dot-product attention
         scale = 1.0 / math.sqrt(self.head_dim)
+        print(q.shape)
         attn = torch.matmul(q.transpose(1, 2), k.transpose(1, 2).transpose(-2, -1)) * scale
         # shape: (B, num_heads, L, L)
 
