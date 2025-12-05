@@ -194,10 +194,6 @@ class CustomMultiHeadAttention(nn.Module):
         nn.init.xavier_uniform_(self.in_proj_weight)
         nn.init.constant_(self.in_proj_bias, 0.)
 
-        self.in_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim)
-        self.in_proj.weight = self.in_proj_weight
-        self.in_proj.bias = self.in_proj_bias
-
         nn.init.xavier_uniform_(self.out_proj.weight)
         nn.init.constant_(self.out_proj.bias, 0.)
 
@@ -211,7 +207,7 @@ class CustomMultiHeadAttention(nn.Module):
 
         # tách thành q, k, v
         q, k, v = qkv.chunk(3, dim=-1)
-        
+
         # reshape multihead
         L, B, _ = x.size()
         
@@ -221,6 +217,11 @@ class CustomMultiHeadAttention(nn.Module):
         return q, k, v
 
     def forward(self, x, attn_mask=None):
+        if not hasattr(self, "in_proj"):
+            self.in_proj = nn.Linear(self.embed_dim, 3 * self.embed_dim)
+            self.in_proj.weight = self.in_proj_weight
+            self.in_proj.bias = self.in_proj_bias
+            
         # x: (L, B, C)
         q, k, v = self._in_proj_qkv(x)
 
