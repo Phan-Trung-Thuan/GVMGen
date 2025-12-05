@@ -347,7 +347,7 @@ class VisionTransformer(nn.Module):
         x = self.ln_pre(x)
 
         x = x.permute(1, 0, 2)  # NLD -> 
-        print(x.dtype, next(self.transformer()).dtype)
+        print(x.dtype, next(self.transformer.parameters()).dtype)
         x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
 
