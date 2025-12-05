@@ -171,6 +171,7 @@ class QuickGELU(nn.Module):
         return x * torch.sigmoid(1.702 * x)
 
 
+import gc
 import math
 from bitsandbytes.nn import Linear4bit
 from bitsandbytes.functional import quantize_nf4
@@ -230,6 +231,11 @@ class CustomMultiHeadAttention(nn.Module):
         self.in_proj.bias.data = self.in_proj_bias.data.to(device)
 
         # After this point NEVER use in_proj_weight or in_proj_bias again
+        del self.in_proj_weight
+        del self.in_proj_bias
+        gc.collect()
+        torch.cuda.empty_cache()
+
 
     # helper
     def _reshape_heads(self, x):
