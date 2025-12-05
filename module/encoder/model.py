@@ -339,7 +339,7 @@ class VisionTransformer(nn.Module):
                 nn.init.normal_(block.cross_output.dense.weight, std=fc_std)
 
     def forward(self, x: torch.Tensor):
-        print(next(self.conv1.parameters()).dtype)
+        print(self.transformer)
         x = self.conv1(x)  # shape = [*, width, grid, grid]
         print(x.dtype, next(self.transformer.parameters()).dtype)
         x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
@@ -449,7 +449,8 @@ class CLIP(nn.Module):
         return self.visual.conv1.weight.dtype
 
     def encode_image(self, image):
-        return self.visual(image.type(self.dtype))
+        with torch.cuda.amp.autocast(enabled=False):
+            return self.visual(image.type(self.dtype))
 
 def convert_weights(model: nn.Module):
     """Convert applicable model parameters to fp16"""
