@@ -309,9 +309,15 @@ class CustomMultiHeadAttention(nn.Module):
             out = out.transpose(0, 1)
 
         del attn
-        
+        del attn_mask
+        del q
+        del k
+        del v
         gc.collect()
         torch.cuda.empty_cache()
+        xq = xq.to(original_device)
+        xk = xk.to(original_device)
+        xv = xv.to(original_device)
 
         return out.to(original_device), None
 
