@@ -469,6 +469,8 @@ class LMModel(StreamingModule):
             else:
                 conditions = conditions + null_conditions
                 tokenized = self.condition_provider.tokenize(conditions)
+                print(tokenized)
+                print(self.condition_provider)
                 cfg_conditions = self.condition_provider(tokenized)
         else:
             cfg_conditions = {}
