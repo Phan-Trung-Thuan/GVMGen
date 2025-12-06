@@ -268,10 +268,10 @@ class CustomMultiHeadAttention(nn.Module):
         xq = xq.to(device)
         xk = xk.to(device)
         xv = xv.to(device)
-        self.in_proj.to(device)
-        self.out_proj.to(device)
-        self.attn_drop.to(device)
-        self.proj_drop.to(device)
+        self.in_proj = self.in_proj.to(device)
+        self.out_proj = self.out_proj.to(device)
+        self.attn_drop = self.attn_drop.to(device)
+        self.attn_drop = self.proj_drop.to(device)
 
         # Put inputs into (B,L,C)
         if not self.batch_first:
@@ -298,7 +298,6 @@ class CustomMultiHeadAttention(nn.Module):
 
         attn = torch.softmax(attn, dim=-1)
         attn = self.attn_drop(attn)
-        print(attn.shape)
 
         # ---- Output ----
         out = torch.matmul(attn, v)
