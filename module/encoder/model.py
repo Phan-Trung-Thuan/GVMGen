@@ -398,7 +398,19 @@ class Transformer(nn.Module):
         self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)])
 
     def forward(self, x: torch.Tensor):
-        return self.resblocks(x)
+        origin_device = next(self.resblocks.parameters()).device
+        for i, layer in enumerate(self.resblocks):
+            if i > self.layers // 2:
+                x = x.to('cuda:1')
+                layer = layer.to('cuda:1')
+                x = layer(x)
+            else:
+                x = x.to('cuda:0')
+                layer = layer.to('cuda:0')
+                x = layer(x)
+                
+        return x.to(origin_device)
+        # return self.resblocks(x)
 
 class QFormerIntermediate(nn.Module):
     def __init__(self, hidden_size, intermediate_size):
