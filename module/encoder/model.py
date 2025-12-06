@@ -302,12 +302,13 @@ class CustomMultiHeadAttention(nn.Module):
         # ---- Output ----
         out = torch.matmul(attn, v)
         out = out.transpose(1, 2).contiguous().view(xq.size(0), xq.size(1), self.embed_dim)
-        out = self.proj_drop(self.out_proj(out))
+        result = self.proj_drop(self.out_proj(out)).to(original_device)
 
         # Convert back to (L,B,C)
         if not self.batch_first:
-            out = out.transpose(0, 1)
+            result = result.transpose(0, 1)
 
+        del out
         del attn
         del attn_mask
         del q
@@ -319,7 +320,7 @@ class CustomMultiHeadAttention(nn.Module):
         xk = xk.to(original_device)
         xv = xv.to(original_device)
 
-        return out.to(original_device), None
+        return result, None
 
 
 class ResidualAttentionBlock(nn.Module):
