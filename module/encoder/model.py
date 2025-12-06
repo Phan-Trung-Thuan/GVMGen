@@ -293,76 +293,77 @@ class CustomMultiHeadAttention(nn.Module):
 
         B, L, C = xq.shape
 
-        # ---- Project Q,K,V ----
-        q_proj = self.in_proj(xq)
-        k_proj = self.in_proj(xk)
-        v_proj = self.in_proj(xv)
+        with torch.no_grad():
+            # ---- Project Q,K,V ----
+            q_proj = self.in_proj(xq)
+            k_proj = self.in_proj(xk)
+            v_proj = self.in_proj(xv)
 
-        q = q_proj[..., :self.embed_dim]
-        k = k_proj[..., self.embed_dim:2*self.embed_dim]
-        v = v_proj[..., 2*self.embed_dim:3*self.embed_dim]
+            q = q_proj[..., :self.embed_dim]
+            k = k_proj[..., self.embed_dim:2*self.embed_dim]
+            v = v_proj[..., 2*self.embed_dim:3*self.embed_dim]
 
-        # ---- Reshape into heads: (B, H, L, D) ----
-        q = self._reshape_heads(q).transpose(1, 2).contiguous()
-        k = self._reshape_heads(k).transpose(1, 2).contiguous()
-        v = self._reshape_heads(v).transpose(1, 2).contiguous()
+            # ---- Reshape into heads: (B, H, L, D) ----
+            q = self._reshape_heads(q).transpose(1, 2).contiguous()
+            k = self._reshape_heads(k).transpose(1, 2).contiguous()
+            v = self._reshape_heads(v).transpose(1, 2).contiguous()
 
-        # -------------------------------
-        #   OVERLAP CHUNKED ATTENTION
-        # -------------------------------
-        results = []
-        step = chunk_size - overlap
+            # -------------------------------
+            #   OVERLAP CHUNKED ATTENTION
+            # -------------------------------
+            results = []
+            step = chunk_size - overlap
 
-        for start in range(0, L, step):
-            end = min(start + chunk_size, L)
+            for start in range(0, L, step):
+                end = min(start + chunk_size, L)
 
-            # Q-chunk
-            q_chunk = q[:, :, start:end, :]
+                # Q-chunk
+                q_chunk = q[:, :, start:end, :]
 
-            # Window for K,V
-            k_start = max(0, start - overlap)
-            k_end = min(L, end + overlap)
+                # Window for K,V
+                k_start = max(0, start - overlap)
+                k_end = min(L, end + overlap)
 
-            k_chunk = k[:, :, k_start:k_end, :]
-            v_chunk = v[:, :, k_start:k_end, :]
+                k_chunk = k[:, :, k_start:k_end, :]
+                v_chunk = v[:, :, k_start:k_end, :]
 
-            # ---- Slice attention mask properly ----
-            if attn_mask is not None:
-                # expected format: (B, 1, L, L) or (B, H, L, L)
-                mask_chunk = attn_mask[..., start:end, k_start:k_end]
-            else:
-                mask_chunk = None
+                # ---- Slice attention mask properly ----
+                if attn_mask is not None:
+                    # expected format: (B, 1, L, L) or (B, H, L, L)
+                    mask_chunk = attn_mask[..., start:end, k_start:k_end]
+                else:
+                    mask_chunk = None
 
-            # ---- SDPA ----
-            out_chunk = F.scaled_dot_product_attention(
-                q_chunk,
-                k_chunk,
-                v_chunk,
-                attn_mask=mask_chunk,
-                dropout_p=0.0,
-                is_causal=False
-            )  # → (B,H,chunk,D)
+                # ---- SDPA ----
+                out_chunk = F.scaled_dot_product_attention(
+                    q_chunk,
+                    k_chunk,
+                    v_chunk,
+                    attn_mask=mask_chunk,
+                    dropout_p=0.0,
+                    is_causal=False
+                )  # → (B,H,chunk,D)
 
-            results.append(out_chunk)
+                results.append(out_chunk)
 
-        # ---- Concatenate chunks ----
-        out = torch.cat(results, dim=2)
-        out = out[:, :, :L, :]  # remove overflow padding from last chunk
+            # ---- Concatenate chunks ----
+            out = torch.cat(results, dim=2)
+            out = out[:, :, :L, :]  # remove overflow padding from last chunk
 
-        # ---- Merge heads (B,L,C) ----
-        out = out.transpose(1, 2).contiguous().view(B, L, C)
-        out = self.out_proj(out)
+            # ---- Merge heads (B,L,C) ----
+            out = out.transpose(1, 2).contiguous().view(B, L, C)
+            out = self.out_proj(out)
 
-        # ---- Convert back to (L,B,C) ----
-        if not self.batch_first:
-            out = out.transpose(0, 1)
+            # ---- Convert back to (L,B,C) ----
+            if not self.batch_first:
+                out = out.transpose(0, 1)
 
-        # Cleanup
-        del q, k, v, results
-        gc.collect()
-        torch.cuda.empty_cache()
+            # Cleanup
+            del q, k, v, results
+            gc.collect()
+            torch.cuda.empty_cache()
 
-        return out.to(original_device), None
+            return out.to(original_device), None
 
 
 class ResidualAttentionBlock(nn.Module):
@@ -385,9 +386,10 @@ class ResidualAttentionBlock(nn.Module):
         return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask, device='cuda:1')[0]
 
     def forward(self, x: torch.Tensor):
-        x = x + self.attention(self.ln_1(x))
-        x = x + self.mlp(self.ln_2(x))
-        return x
+        with torch.no_grad():
+            x = x + self.attention(self.ln_1(x))
+            x = x + self.mlp(self.ln_2(x))
+            return x
 
 
 class Transformer(nn.Module):
