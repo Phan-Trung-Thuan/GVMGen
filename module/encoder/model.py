@@ -265,6 +265,9 @@ class CustomMultiHeadAttention(nn.Module):
         self._build_in_proj()
 
         # Ensure projection layers on the same device
+        xq = xq.to(device)
+        xk = xk.to(device)
+        xv = xv.to(device)
         self.in_proj.to(device)
         self.out_proj.to(device)
         self.attn_drop.to(device)
