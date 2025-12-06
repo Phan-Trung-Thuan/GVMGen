@@ -254,10 +254,6 @@ class CustomMultiHeadAttention(nn.Module):
         B, L, _ = x.size()
         return x.view(B, L, self.num_heads, self.head_dim)
 
-    import torch
-    import torch.nn.functional as F
-    import math
-    import gc
     def forward(self, xq, xk, xv,
                 need_weights=False,
                 attn_mask=None,
