@@ -18,6 +18,7 @@ from .encodec import CompressionModel
 from .genmodel import BaseGenModel
 
 from .lm import LMModel
+from ....module.encoder.model import CustomMultiHeadAttention
 from .builders import get_debug_compression_model, get_debug_lm_model
 from .loaders import load_compression_model, load_lm_model
 from ..data.audio_utils import convert_audio
@@ -78,6 +79,8 @@ def convert_to_linear4bit(model):
                 new_linear.bias = module.bias
 
             setattr(model, name, new_linear)
+        elif isinstance(module, CustomMultiHeadAttention):
+            continue
         else:
             convert_to_linear4bit(module)
     return model

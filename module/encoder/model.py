@@ -214,21 +214,37 @@ class CustomMultiHeadAttention(nn.Module):
         if hasattr(self, "in_proj"):
             return
 
-        self.in_proj = Linear4bit(
-            self.embed_dim,
+        # self.in_proj = Linear4bit(
+        #     self.embed_dim,
+        #     self.embed_dim * 3,
+        #     bias=True,
+        #     compute_dtype=torch.float16,
+        #     quant_type="nf4",
+        # )
+
+        # # quantize weight
+        # q_w, q_state = quantize_nf4(self.in_proj_weight.data)
+        # self.in_proj.weight.data = q_w
+        # self.in_proj.weight.quant_state = q_state
+
+        # # copy bias
+        # self.in_proj.bias.data = self.in_proj_bias.data
+
+        # Tạo in_proj dạng Linear bình thường
+        self.in_proj = nn.Linear(
+            self.embed_dim, 
             self.embed_dim * 3,
-            bias=True,
-            compute_dtype=torch.float16,
-            quant_type="nf4",
+            bias=True
         )
 
-        # quantize weight
-        q_w, q_state = quantize_nf4(self.in_proj_weight.data)
-        self.in_proj.weight.data = q_w
-        self.in_proj.weight.quant_state = q_state
+        # Chép trọng số từ weight/bias ban đầu
+        with torch.no_grad():
+            self.in_proj.weight.copy_(self.in_proj_weight)
+            self.in_proj.bias.copy_(self.in_proj_bias)
 
-        # copy bias
-        self.in_proj.bias.data = self.in_proj_bias.data
+        # Sau khi gán xong → bỏ luôn weight/bias cũ để tiết kiệm RAM
+        del self.in_proj_weight
+        del self.in_proj_bias
 
         # After this point NEVER use in_proj_weight or in_proj_bias again
 
