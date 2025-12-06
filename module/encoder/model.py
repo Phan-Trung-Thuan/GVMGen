@@ -198,8 +198,8 @@ class CustomMultiHeadAttention(nn.Module):
         # Out projection
         self.out_proj = nn.Linear(embed_dim, embed_dim)
 
-        self.attn_drop = nn.Dropout(dropout)
-        self.proj_drop = nn.Dropout(dropout)
+        # self.attn_drop = nn.Dropout(dropout)
+        # self.proj_drop = nn.Dropout(dropout)
 
         self._reset_parameters()
 
@@ -282,8 +282,8 @@ class CustomMultiHeadAttention(nn.Module):
 
         self.in_proj = self.in_proj.to(device)
         self.out_proj = self.out_proj.to(device)
-        self.attn_drop = self.attn_drop.to(device)
-        self.proj_drop = self.proj_drop.to(device)
+        # self.attn_drop = self.attn_drop.to(device)
+        # self.proj_drop = self.proj_drop.to(device)
 
         # Convert to (B, L, C)
         if not self.batch_first:
@@ -351,7 +351,7 @@ class CustomMultiHeadAttention(nn.Module):
 
         # ---- Merge heads (B,L,C) ----
         out = out.transpose(1, 2).contiguous().view(B, L, C)
-        out = self.proj_drop(self.out_proj(out))
+        out = self.out_proj(out)
 
         # ---- Convert back to (L,B,C) ----
         if not self.batch_first:
