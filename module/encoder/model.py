@@ -254,7 +254,7 @@ class CustomMultiHeadAttention(nn.Module):
         B, L, _ = x.size()
         return x.view(B, L, self.num_heads, self.head_dim)
 
-    def forward(self, xq, xk=None, xv=None, need_weights=False, attn_mask=None, device='cuda:0'):
+    def forward(self, xq, xk, xv, need_weights=False, attn_mask=None, device='cuda:0'):
         """
         Self-attention: forward(x)
         Cross-attention: forward(xq, xk, xv)
@@ -276,23 +276,11 @@ class CustomMultiHeadAttention(nn.Module):
             if xk is not None: xk = xk.transpose(0, 1)
             if xv is not None: xv = xv.transpose(0, 1)
 
-        # Move inputs to device
-        xq = xq
-        if xk is not None: xk = xk
-        if xv is not None: xv = xv
-
         # ---- Self-attention ----
-        if xk is None and xv is None:
-            qkv = self.in_proj(xq)  # (B,L,3C)
-            q, k, v = qkv.chunk(3, dim=-1)
-        else:
-            if xk is None: xk = xq
-            if xv is None: xv = xk
-
-            # Instead project separately:
-            q = self.in_proj(xq)[..., :self.embed_dim]
-            k = self.in_proj(xk)[..., self.embed_dim:2*self.embed_dim]
-            v = self.in_proj(xv)[..., 2*self.embed_dim:3*self.embed_dim]
+        print(next(self.in_proj.parameters()).device, xq.device)
+        q = self.in_proj(xq)[..., :self.embed_dim]
+        k = self.in_proj(xk)[..., self.embed_dim:2*self.embed_dim]
+        v = self.in_proj(xv)[..., 2*self.embed_dim:3*self.embed_dim]
 
         # ---- Reshape heads ----
         q = self._reshape_heads(q).transpose(1, 2).to(device)
