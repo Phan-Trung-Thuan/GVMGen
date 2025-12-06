@@ -280,7 +280,7 @@ class CustomMultiHeadAttention(nn.Module):
         # if attn_mask is not None:
         #     attn_mask = attn_mask.to(device)
 
-        # self.in_proj = self.in_proj.to(device)
+        self.in_proj = self.in_proj.to(original_device)
         # self.out_proj = self.out_proj.to(device)
         # self.attn_drop = self.attn_drop.to(device)
         # self.proj_drop = self.proj_drop.to(device)
