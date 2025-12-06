@@ -210,7 +210,7 @@ class CustomMultiHeadAttention(nn.Module):
         nn.init.constant_(self.out_proj.bias, 0.)
 
     # Create quantized in_proj only once
-    def _build_in_proj(self, device):
+    def _build_in_proj(self):
         if hasattr(self, "in_proj"):
             return
 
@@ -246,10 +246,10 @@ class CustomMultiHeadAttention(nn.Module):
 
         # ---- Always use input device ----
         original_device = xq.device
-        self._build_in_proj(device)
+        self._build_in_proj()
 
         # Ensure projection layers on the same device
-        self.in_proj.to(device)
+        self.in_proj
         self.out_proj.to(device)
         self.attn_drop.to(device)
         self.proj_drop.to(device)
@@ -261,9 +261,9 @@ class CustomMultiHeadAttention(nn.Module):
             if xv is not None: xv = xv.transpose(0, 1)
 
         # Move inputs to device
-        xq = xq.to(device)
-        if xk is not None: xk = xk.to(device)
-        if xv is not None: xv = xv.to(device)
+        xq = xq
+        if xk is not None: xk = xk
+        if xv is not None: xv = xv
 
         # ---- Self-attention ----
         if xk is None and xv is None:
@@ -273,7 +273,6 @@ class CustomMultiHeadAttention(nn.Module):
             if xk is None: xk = xq
             if xv is None: xv = xk
 
-            proj_qkv = self.in_proj(torch.cat([xq, xk, xv], dim=0))  # Not ideal, skip
             # Instead project separately:
             q = self.in_proj(xq)[..., :self.embed_dim]
             k = self.in_proj(xk)[..., self.embed_dim:2*self.embed_dim]
