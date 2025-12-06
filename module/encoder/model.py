@@ -274,14 +274,14 @@ class CustomMultiHeadAttention(nn.Module):
         self._build_in_proj()
 
         # Move everything to same device
-        xq = xq.to(device)
-        xk = xk.to(device)
-        xv = xv.to(device)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(device)
+        # xq = xq.to(device)
+        # xk = xk.to(device)
+        # xv = xv.to(device)
+        # if attn_mask is not None:
+        #     attn_mask = attn_mask.to(device)
 
-        self.in_proj = self.in_proj.to(device)
-        self.out_proj = self.out_proj.to(device)
+        # self.in_proj = self.in_proj.to(device)
+        # self.out_proj = self.out_proj.to(device)
         # self.attn_drop = self.attn_drop.to(device)
         # self.proj_drop = self.proj_drop.to(device)
 
