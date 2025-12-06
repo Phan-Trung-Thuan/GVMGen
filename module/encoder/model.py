@@ -369,8 +369,8 @@ class ResidualAttentionBlock(nn.Module):
     def __init__(self, d_model: int, n_head: int, attn_mask: torch.Tensor = None):
         super().__init__()
 
-        self.attn = nn.MultiheadAttention(d_model, n_head)
-        # self.attn = CustomMultiHeadAttention(d_model, n_head)
+        # self.attn = nn.MultiheadAttention(d_model, n_head)
+        self.attn = CustomMultiHeadAttention(d_model, n_head)
         self.ln_1 = LayerNorm(d_model)
         self.mlp = nn.Sequential(OrderedDict([
             ("c_fc", nn.Linear(d_model, d_model * 4)),
@@ -382,7 +382,7 @@ class ResidualAttentionBlock(nn.Module):
 
     def attention(self, x: torch.Tensor):
         self.attn_mask = self.attn_mask.to(dtype=x.dtype, device=x.device) if self.attn_mask is not None else None
-        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
+        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask, device='cuda:1')[0]
 
     def forward(self, x: torch.Tensor):
         x = x + self.attention(self.ln_1(x))
@@ -428,7 +428,7 @@ class QFormerOutput(nn.Module):
 class QFormerLayer(nn.Module):
     def __init__(self, d_model, heads, layer_idx: int, drop_out, layer_norm_eps, cross_attention_frequency):
         super().__init__()
-        self.attention = nn.MultiheadAttention(d_model, heads, dropout=drop_out, batch_first=True)
+        self.attention = CustomMultiHeadAttention(d_model, heads, dropout=drop_out, batch_first=True)
         self.self_output = nn.Sequential(OrderedDict([
             ("dense", nn.Linear(d_model, d_model)),
             ("LayerNorm", LayerNorm(d_model, eps = layer_norm_eps)),
@@ -452,13 +452,13 @@ class QFormerLayer(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor, x: torch.Tensor):
         # print("-------------", self.layer_idx, "----------------")
-        self_attention_outputs = self.attention(hidden_states, hidden_states, hidden_states)
+        self_attention_outputs = self.attention(hidden_states, hidden_states, hidden_states, device='cuda:1')
         query_attention_output = self_attention_outputs[0]
         query_attention_output = self.self_output(query_attention_output)
         if self.has_cross_attention:
             if x is None:
                 raise ValueError("encoder_hidden_states must be given for cross-attention layers")
-            cross_attention_outputs = self.crossattention(query_attention_output, x, x)
+            cross_attention_outputs = self.crossattention(query_attention_output, x, x, device='cuda:1')
             query_attention_output = cross_attention_outputs[0]
             query_attention_output = self.cross_output(query_attention_output)
         
