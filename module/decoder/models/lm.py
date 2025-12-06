@@ -253,8 +253,10 @@ class LMModel(StreamingModule):
         else:
             assert not conditions, "Shouldn't pass both conditions and condition_tensors."
 
+        print('self.fuser(input_, condition_tensors)')
         input_, cross_attention_input = self.fuser(input_, condition_tensors)
 
+        print('self.transformer(input_, cross_attention_src=cross_attention_input,')
         out = self.transformer(input_, cross_attention_src=cross_attention_input,
                                src_mask=(self.attn_mask_per_stage[stage] if stage >= 0 else None))
         if self.out_norm:
