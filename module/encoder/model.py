@@ -298,11 +298,13 @@ class CustomMultiHeadAttention(nn.Module):
 
         attn = torch.softmax(attn, dim=-1)
         attn = self.attn_drop(attn)
+        print(attn.shape)
 
         # ---- Output ----
         out = torch.matmul(attn, v)
         out = out.transpose(1, 2).contiguous().view(xq.size(0), xq.size(1), self.embed_dim)
         result = self.proj_drop(self.out_proj(out)).to(original_device)
+        print(attn.shape, xq.shape, out.shape)
 
         # Convert back to (L,B,C)
         if not self.batch_first:
