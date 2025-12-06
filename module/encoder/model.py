@@ -395,20 +395,22 @@ class Transformer(nn.Module):
         super().__init__()
         self.width = width
         self.layers = layers
-        self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)])
+        self.resblocks = nn.Sequential(*[ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)]).eval()
 
     def forward(self, x: torch.Tensor):
         origin_device = next(self.resblocks.parameters()).device
         for i, layer in enumerate(self.resblocks):
             print(i)
-            # if i > self.layers // 2:
-            x = x.to('cuda:1')
-            layer = layer.to('cuda:1')
-            x = layer(x)
-            # else:
-            #     x = x.to('cuda:0')
-            #     layer = layer.to('cuda:0')
-            #     x = layer(x)
+            if i % 2 == 0:
+                x = x.to('cuda:1')
+                layer = layer.to('cuda:1')
+                x = layer(x)
+            else:
+                x = x.to('cuda:0')
+                layer = layer.to('cuda:0')
+                x = layer(x)
+            gc.collect()
+            torch.cuda.empty_cache()
 
         return x.to(origin_device)
         # return self.resblocks(x)
