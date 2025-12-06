@@ -235,12 +235,12 @@ class CustomMultiHeadAttention(nn.Module):
             self.embed_dim, 
             self.embed_dim * 3,
             bias=True
-        )
+        ).half()
 
         # Chép trọng số từ weight/bias ban đầu
         with torch.no_grad():
-            self.in_proj.weight.copy_(self.in_proj_weight)
-            self.in_proj.bias.copy_(self.in_proj_bias)
+            self.in_proj.weight.copy_(self.in_proj_weight.half())
+            self.in_proj.bias.copy_(self.in_proj_bias.half())
 
         # Sau khi gán xong → bỏ luôn weight/bias cũ để tiết kiệm RAM
         del self.in_proj_weight
