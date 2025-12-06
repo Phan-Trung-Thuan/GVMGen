@@ -254,74 +254,119 @@ class CustomMultiHeadAttention(nn.Module):
         B, L, _ = x.size()
         return x.view(B, L, self.num_heads, self.head_dim)
 
-    def forward(self, xq, xk, xv, need_weights=False, attn_mask=None, device='cuda:0'):
+    import torch
+    import torch.nn.functional as F
+    import math
+    import gc
+    def forward(self, xq, xk, xv,
+                need_weights=False,
+                attn_mask=None,
+                device='cuda:0',
+                chunk_size=256,
+                overlap=64):
         """
-        Self-attention: forward(x)
+        Self-attention: forward(xq, xq, xq)
         Cross-attention: forward(xq, xk, xv)
+
+        Supports:
+          - scaled_dot_product_attention
+          - overlap chunked attention
+          - attn_mask (padding / causal / general)
         """
 
-        # ---- Always use input device ----
         original_device = xq.device
         self._build_in_proj()
 
-        # Ensure projection layers on the same device
+        # Move everything to same device
         xq = xq.to(device)
         xk = xk.to(device)
         xv = xv.to(device)
+        if attn_mask is not None:
+            attn_mask = attn_mask.to(device)
+
         self.in_proj = self.in_proj.to(device)
         self.out_proj = self.out_proj.to(device)
         self.attn_drop = self.attn_drop.to(device)
-        self.attn_drop = self.proj_drop.to(device)
+        self.proj_drop = self.proj_drop.to(device)
 
-        # Put inputs into (B,L,C)
+        # Convert to (B, L, C)
         if not self.batch_first:
             xq = xq.transpose(0, 1)
             if xk is not None: xk = xk.transpose(0, 1)
             if xv is not None: xv = xv.transpose(0, 1)
 
-        # ---- Self-attention ----
-        q = self.in_proj(xq)[..., :self.embed_dim]
-        k = self.in_proj(xk)[..., self.embed_dim:2*self.embed_dim]
-        v = self.in_proj(xv)[..., 2*self.embed_dim:3*self.embed_dim]
+        B, L, C = xq.shape
 
-        # ---- Reshape heads ----
-        q = self._reshape_heads(q).transpose(1, 2).to(device)
-        k = self._reshape_heads(k).transpose(1, 2).to(device)
-        v = self._reshape_heads(v).transpose(1, 2).to(device)
+        # ---- Project Q,K,V ----
+        q_proj = self.in_proj(xq)
+        k_proj = self.in_proj(xk)
+        v_proj = self.in_proj(xv)
 
-        # ---- Attention ----
-        scale = 1.0 / math.sqrt(self.head_dim)
-        attn = torch.matmul(q, k.transpose(-2, -1)) * scale
+        q = q_proj[..., :self.embed_dim]
+        k = k_proj[..., self.embed_dim:2*self.embed_dim]
+        v = v_proj[..., 2*self.embed_dim:3*self.embed_dim]
 
-        if attn_mask is not None:
-            attn = attn + attn_mask.to(device)
+        # ---- Reshape into heads: (B, H, L, D) ----
+        q = self._reshape_heads(q).transpose(1, 2).contiguous()
+        k = self._reshape_heads(k).transpose(1, 2).contiguous()
+        v = self._reshape_heads(v).transpose(1, 2).contiguous()
 
-        attn = torch.softmax(attn, dim=-1)
-        attn = self.attn_drop(attn)
+        # -------------------------------
+        #   OVERLAP CHUNKED ATTENTION
+        # -------------------------------
+        results = []
+        step = chunk_size - overlap
 
-        # ---- Output ----
-        out = torch.matmul(attn, v)
-        out = out.transpose(1, 2).contiguous().view(xq.size(0), xq.size(1), self.embed_dim)
-        result = self.proj_drop(self.out_proj(out)).to(original_device)
-        print(attn.shape, xq.shape, out.shape)
+        for start in range(0, L, step):
+            end = min(start + chunk_size, L)
 
-        # Convert back to (L,B,C)
+            # Q-chunk
+            q_chunk = q[:, :, start:end, :]
+
+            # Window for K,V
+            k_start = max(0, start - overlap)
+            k_end = min(L, end + overlap)
+
+            k_chunk = k[:, :, k_start:k_end, :]
+            v_chunk = v[:, :, k_start:k_end, :]
+
+            # ---- Slice attention mask properly ----
+            if attn_mask is not None:
+                # expected format: (B, 1, L, L) or (B, H, L, L)
+                mask_chunk = attn_mask[..., start:end, k_start:k_end]
+            else:
+                mask_chunk = None
+
+            # ---- SDPA ----
+            out_chunk = F.scaled_dot_product_attention(
+                q_chunk,
+                k_chunk,
+                v_chunk,
+                attn_mask=mask_chunk,
+                dropout_p=0.0,
+                is_causal=False
+            )  # → (B,H,chunk,D)
+
+            results.append(out_chunk)
+
+        # ---- Concatenate chunks ----
+        out = torch.cat(results, dim=2)
+        out = out[:, :, :L, :]  # remove overflow padding from last chunk
+
+        # ---- Merge heads (B,L,C) ----
+        out = out.transpose(1, 2).contiguous().view(B, L, C)
+        out = self.proj_drop(self.out_proj(out))
+
+        # ---- Convert back to (L,B,C) ----
         if not self.batch_first:
-            result = result.transpose(0, 1)
+            out = out.transpose(0, 1)
 
-        del out
-        del attn
-        del attn_mask
-        del q
-        del k
-        del v
+        # Cleanup
+        del q, k, v, results
         gc.collect()
         torch.cuda.empty_cache()
-        xq = xq.to(original_device)
-        xk = xk.to(original_device)
-        xv = xv.to(original_device)
 
-        return result, None
+        return out.to(original_device), None
 
 
 class ResidualAttentionBlock(nn.Module):
