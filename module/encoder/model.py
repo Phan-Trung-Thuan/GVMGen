@@ -262,8 +262,8 @@ class CustomMultiHeadAttention(nn.Module):
                 need_weights=False,
                 attn_mask=None,
                 device='cuda:0',
-                chunk_size=256,
-                overlap=64):
+                chunk_size=128,
+                overlap=32):
         """
         Self-attention: forward(xq, xq, xq)
         Cross-attention: forward(xq, xk, xv)
