@@ -18,7 +18,6 @@ from .encodec import CompressionModel
 from .genmodel import BaseGenModel
 
 from .lm import LMModel
-from ....module.encoder.model import CustomMultiHeadAttention
 from .builders import get_debug_compression_model, get_debug_lm_model
 from .loaders import load_compression_model, load_lm_model
 from ..data.audio_utils import convert_audio
@@ -79,8 +78,6 @@ def convert_to_linear4bit(model):
                 new_linear.bias = module.bias
 
             setattr(model, name, new_linear)
-        elif isinstance(module, CustomMultiHeadAttention):
-            continue
         else:
             convert_to_linear4bit(module)
     return model
@@ -111,7 +108,8 @@ class GVMGen(BaseGenModel):
                 device = 'cpu'
 
         # lm = convert_to_linear8bit(load_lm_model(name, device), device)
-        lm = convert_to_linear4bit(load_lm_model(name, device).half()).eval()
+        # lm = convert_to_linear4bit(load_lm_model(name, device).half()).eval()
+        lm = load_lm_model(name, device).half().eval()
         compression_model = load_compression_model(name, device).eval()
         if 'self_wav' in lm.condition_provider.conditioners:
             lm.condition_provider.conditioners['self_wav'].match_len_on_eval = True
