@@ -265,7 +265,7 @@ class CustomMultiHeadAttention(nn.Module):
         self._build_in_proj()
 
         # Ensure projection layers on the same device
-        self.in_proj
+        self.in_proj.to(device)
         self.out_proj.to(device)
         self.attn_drop.to(device)
         self.proj_drop.to(device)
@@ -277,7 +277,6 @@ class CustomMultiHeadAttention(nn.Module):
             if xv is not None: xv = xv.transpose(0, 1)
 
         # ---- Self-attention ----
-        print(next(self.in_proj.parameters()).device, xq.device)
         q = self.in_proj(xq)[..., :self.embed_dim]
         k = self.in_proj(xk)[..., self.embed_dim:2*self.embed_dim]
         v = self.in_proj(xv)[..., 2*self.embed_dim:3*self.embed_dim]
