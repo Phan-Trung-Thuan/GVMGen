@@ -282,8 +282,8 @@ class CustomMultiHeadAttention(nn.Module):
 
         self.in_proj = self.in_proj.to(device)
         self.out_proj = self.out_proj.to(device)
-        self.attn_drop = self.attn_drop.to(device)
-        self.proj_drop = self.proj_drop.to(device)
+        # self.attn_drop = self.attn_drop.to(device)
+        # self.proj_drop = self.proj_drop.to(device)
 
         # Convert to (B, L, C)
         if not self.batch_first:
