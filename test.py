@@ -80,9 +80,9 @@ def main():
     end = time.time()
     print(f'Processing time: {end - start}')
 
-    peak_mem_0 = max(peak_mem_0, torch.cuda.max_memory_allocated() / 1024 / 1024)
+    peak_mem_0 = max(peak_mem_0, torch.cuda.max_memory_allocated(0) / 1024 / 1024)
     print(f'Memory usage: {peak_mem_0:.2f} MB')
-    peak_mem_1 = max(peak_mem_1, torch.cuda.max_memory_allocated() / 1024 / 1024)
+    peak_mem_1 = max(peak_mem_1, torch.cuda.max_memory_allocated(1) / 1024 / 1024)
     print(f'Memory usage: {peak_mem_1:.2f} MB')
 
 if __name__ == '__main__':
