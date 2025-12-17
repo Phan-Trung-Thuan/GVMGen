@@ -10,8 +10,16 @@ import argparse
 torch.cuda.empty_cache()
 torch.cuda.reset_peak_memory_stats()
 
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters())
+def count_parameters_gvmgen(model):
+    total = 0
+
+    if hasattr(model, "compression_model"):
+        total += sum(p.numel() for p in model.compression_model.parameters())
+
+    if hasattr(model, "lm"):
+        total += sum(p.numel() for p in model.lm.parameters())
+
+    return total
     
 def main():
     peak_mem_0 = 0
