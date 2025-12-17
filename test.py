@@ -9,6 +9,10 @@ import argparse
 
 torch.cuda.empty_cache()
 torch.cuda.reset_peak_memory_stats()
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters())
+    
 def main():
     peak_mem_0 = 0
     peak_mem_1 = 0
@@ -34,6 +38,7 @@ def main():
 
     mp4_pt = capture_video(args.video_path, args.fps, device, args.duration)
     model.set_generation_params(duration=mp4_pt.shape[0])
+    print(count_parameters(model))
 
     description = [mp4_pt]
 
