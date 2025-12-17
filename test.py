@@ -46,7 +46,8 @@ def main():
 
     mp4_pt = capture_video(args.video_path, args.fps, device, args.duration)
     model.set_generation_params(duration=mp4_pt.shape[0])
-    print(count_parameters(model))
+    print(count_parameters_gvmgen(model))
+    return
 
     description = [mp4_pt]
 
