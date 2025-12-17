@@ -9,10 +9,10 @@ import argparse
 
 torch.cuda.empty_cache()
 torch.cuda.reset_peak_memory_stats()
-peak_mem_0 = 0
-peak_mem_1 = 0
-
 def main():
+    peak_mem_0 = 0
+    peak_mem_1 = 0
+
     parser = argparse.ArgumentParser(description='Script for processing video and model paths.')
     
     parser.add_argument('--model_path', type=str, default='./checkpoints', 
@@ -77,12 +77,13 @@ def main():
             print(f"error：{e}")
         os.remove(str(idx)+'.wav')
 
+        peak_mem_0 = max(peak_mem_0, torch.cuda.max_memory_allocated(0) / 1024 / 1024)
+        peak_mem_1 = max(peak_mem_1, torch.cuda.max_memory_allocated(1) / 1024 / 1024)
+
     end = time.time()
     print(f'Processing time: {end - start}')
 
-    peak_mem_0 = max(peak_mem_0, torch.cuda.max_memory_allocated(0) / 1024 / 1024)
     print(f'Memory usage: {peak_mem_0:.2f} MB')
-    peak_mem_1 = max(peak_mem_1, torch.cuda.max_memory_allocated(1) / 1024 / 1024)
     print(f'Memory usage: {peak_mem_1:.2f} MB')
 
 if __name__ == '__main__':
